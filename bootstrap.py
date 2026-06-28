@@ -8,12 +8,11 @@ import urllib.request
 import zipfile
 
 # ======================= EDIT THESE IN COLAB =======================
-# --- Distributed (multi-PC) mode ---------------------------------------------
-# Paste your coordinator Web app URL here to run MANY PCs/Colab sessions against
-# one shared queue with no number-juggling and no duplicates (see coordinator/
-# README.md for the 5-minute setup). When set, START/END below are IGNORED and
-# students.csv is not needed — each PC just claims the next student automatically.
-# Leave it "" to use the classic single-PC START/END range instead.
+# --- Distributed (multi-PC) mode — REQUIRED ----------------------------------
+# Coordinator Web app URL for the shared Google Sheet queue (see coordinator/
+# README.md for the 5-minute setup). Run MANY PCs/Colab sessions against this one
+# queue with no number-juggling and no duplicates: each PC just claims the next
+# student automatically. students.csv is not needed.
 COORDINATOR_URL = "https://script.google.com/macros/s/AKfycbzl3TijKis8trT9-_K8EMDwEj6a0tm7itxcV9w8nlZPO0PkaHo1lc2JGQCrHLlCO8WuEQ/exec"
 PC_ID = ""           # optional friendly name for this PC in the dashboard
 # -----------------------------------------------------------------------------
