@@ -8,11 +8,20 @@ import urllib.request
 import zipfile
 
 # ======================= EDIT THESE IN COLAB =======================
-# Which students to process (1-based, inclusive). Set END = None to go to the
-# end of the list. These override START/END in config.json.
+# --- Distributed (multi-PC) mode ---------------------------------------------
+# Paste your coordinator Web app URL here to run MANY PCs/Colab sessions against
+# one shared queue with no number-juggling and no duplicates (see coordinator/
+# README.md for the 5-minute setup). When set, START/END below are IGNORED and
+# students.csv is not needed — each PC just claims the next student automatically.
+# Leave it "" to use the classic single-PC START/END range instead.
+COORDINATOR_URL = ""
+PC_ID = ""           # optional friendly name for this PC in the dashboard
+# -----------------------------------------------------------------------------
+# Single-PC range (used ONLY when COORDINATOR_URL is ""). 1-based, inclusive;
+# set END = None to go to the end of the list. Override START/END in config.json.
 START = 1176
 END = 1250
-CONCURRENCY = 1      # how many browsers run in parallel
+CONCURRENCY = 1      # how many browsers run in parallel (per PC)
 HEADLESS = True      # True on Colab (no display); False to watch the browser
 # ===================================================================
 
@@ -179,9 +188,12 @@ else:
 if not (run(with_deps) or run(plain)):
     sys.exit("Error installing Playwright browsers.")
 
-if not os.path.exists("students.csv"):
+# In distributed mode the student list comes from the coordinator queue, so a
+# local students.csv is not needed.
+if not os.environ.get("COORDINATOR_URL") and not os.path.exists("students.csv"):
     sys.exit("Error: students.csv not found next to the runner. Upload it to the "
-             "Colab session before running bootstrap.py.")
+             "Colab session before running bootstrap.py (or set COORDINATOR_URL "
+             "for distributed mode).")
 
 print("\n=== Setup complete! Starting the runner (MODE=auto) ===")
 if not run("node coursera_manual_runner.js", env=dict(os.environ, MODE="auto")):
@@ -213,6 +225,11 @@ def provision_data_files(project_dir):
             copied.append(name)
     if copied:
         print(f"Provisioned uploaded data files into the project: {', '.join(copied)}")
+
+    # In distributed mode the student list comes from the coordinator queue, so a
+    # local students.csv is not required.
+    if COORDINATOR_URL:
+        return
 
     if not os.path.exists(os.path.join(project_dir, "students.csv")):
         raise SystemExit(
@@ -253,10 +270,21 @@ def run_project(base):
     env["CONCURRENCY"] = str(CONCURRENCY)
     env["HEADLESS"] = "y" if HEADLESS else "n"
 
+    # Distributed mode: hand the coordinator URL (and optional PC id) to the
+    # runner, which then ignores START/END and pulls from the shared queue.
+    if COORDINATOR_URL:
+        env["COORDINATOR_URL"] = COORDINATOR_URL
+        if PC_ID:
+            env["PC_ID"] = PC_ID
+        print(f"\n=== Running {' '.join([sys.executable, 'run_on_colab.py'])} in {project_dir} "
+              f"(DISTRIBUTED queue mode, CONCURRENCY={CONCURRENCY}, HEADLESS={HEADLESS}) ===",
+              flush=True)
+    else:
+        print(f"\n=== Running {' '.join([sys.executable, 'run_on_colab.py'])} in {project_dir} "
+              f"(START={START}, END={END}, CONCURRENCY={CONCURRENCY}, "
+              f"HEADLESS={HEADLESS}) ===", flush=True)
+
     cmd = [sys.executable, "run_on_colab.py"]
-    print(f"\n=== Running {' '.join(cmd)} in {project_dir} "
-          f"(START={START}, END={END}, CONCURRENCY={CONCURRENCY}, "
-          f"HEADLESS={HEADLESS}) ===", flush=True)
 
     # Stream the child's output straight through — no screenshot viewer.
     proc = subprocess.Popen(

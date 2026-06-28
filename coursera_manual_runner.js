@@ -1,4 +1,5 @@
 const fs = require("node:fs/promises");
+const os = require("node:os");
 const path = require("node:path");
 const readline = require("node:readline/promises");
 const { stdin: input, stdout: output } = require("node:process");
@@ -788,6 +789,228 @@ async function dismissOverlays(page) {
   }
 }
 
+// ===================== Distributed coordinator (queue) mode =====================
+// When COORDINATOR_URL is set, PCs do NOT iterate a local START..END range.
+// Instead each worker repeatedly CLAIMS the next available student from a shared
+// Google Apps Script + Sheet queue, runs the full flow, then reports done/failed.
+// The coordinator guarantees no two PCs ever get the same student (atomic claim)
+// and auto-reclaims students whose PC crashed (lease expiry). On any failure the
+// student is simply redone from scratch (fresh signup) by whichever PC claims it
+// next, so nothing is lost and no manual number-juggling is needed. See coordinator/.
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function makePcId() {
+  return process.env.PC_ID || `${os.hostname()}-${process.pid}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// POST a JSON action to the coordinator with exponential-backoff retries. The
+// Apps Script web app 302-redirects to googleusercontent.com; fetch follows it.
+async function coordinatorRequest(url, action, payload = {}, { retries = 6 } = {}) {
+  const body = JSON.stringify({ action, token: process.env.COORDINATOR_TOKEN || "", ...payload });
+  let lastErr;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        redirect: "follow",
+      });
+      const text = await resp.text();
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text.slice(0, 160)}`);
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`non-JSON reply: ${text.slice(0, 160)}`);
+      }
+      if (json && json.error) throw new Error(`coordinator error: ${json.error}`);
+      return json;
+    } catch (e) {
+      lastErr = e;
+      const backoff = Math.min(20000, 800 * 2 ** attempt) + Math.floor(Math.random() * 600);
+      await sleep(backoff);
+    }
+  }
+  throw new Error(`coordinator '${action}' failed after ${retries} tries: ${lastErr.message}`);
+}
+
+// Turn a claimed {student_id, full_name} into a runnable student with a brand-new
+// unique email + password (each retry is a fresh signup, so a half-made account
+// from a crashed PC never blocks anyone).
+function buildStudentFromClaim(claim) {
+  const parts = String(claim.full_name || "").trim().split(/\s+/).filter(Boolean);
+  const first = parts[0] || "Student";
+  const last = parts.slice(1).join(" ") || String(claim.student_id || "User");
+  const student = { student_id: claim.student_id, first_name: first, last_name: last, email: "", password: "" };
+  student.email = makeFreshEmail(student);
+  student.password = makePassword(student);
+  return student;
+}
+
+// Run the whole course flow for one student across Chromium -> Firefox -> WebKit,
+// returning { cert, error }. Mirrors the AUTO-mode per-student logic.
+async function runFlowWithFallbacks(browser, student, headless, logPrefix) {
+  let cert = "";
+  let error = "";
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+    userAgent: USER_AGENT,
+    locale: "en-US",
+  });
+  await context.addInitScript(STEALTH_SCRIPT);
+  const page = await context.newPage();
+  try {
+    cert = await runAutomatedFlow(page, student, logPrefix);
+  } catch (err) {
+    error = err.message;
+    console.warn(`\n${logPrefix} [queue] Chromium flow stopped: ${err.message}`);
+  } finally {
+    await context.close().catch(() => {});
+  }
+
+  if (!cert) {
+    const fallbacks = [
+      { name: "Firefox", launcher: firefox, ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" },
+      { name: "WebKit", launcher: webkit, ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15" },
+    ];
+    for (const fb of fallbacks) {
+      console.log(`\n${logPrefix} [queue] Fallback: retrying in ${fb.name}...`);
+      try {
+        const fbBrowser = await fb.launcher.launch({ headless });
+        const fContext = await fbBrowser.newContext({
+          viewport: { width: 1920, height: 1080 },
+          userAgent: fb.ua,
+          locale: "en-US",
+        });
+        await fContext.addInitScript(STEALTH_SCRIPT);
+        const fPage = await fContext.newPage();
+        try {
+          cert = await runAutomatedFlow(fPage, student, logPrefix);
+        } finally {
+          await fContext.close().catch(() => {});
+          await fbBrowser.close().catch(() => {});
+        }
+        if (cert) { error = ""; break; }
+      } catch (errF) {
+        error = errF.message;
+        console.warn(`\n${logPrefix} [queue] ${fb.name} fallback stopped: ${errF.message}`);
+      }
+    }
+  }
+  return { cert: cert || "", error };
+}
+
+async function runCoordinatorMode(config) {
+  const coordinatorUrl = process.env.COORDINATOR_URL || config.COORDINATOR_URL;
+  const pcId = makePcId();
+
+  // Headless: explicit env/config wins, otherwise auto-headless when no display.
+  const envHeadlessRaw = process.env.HEADLESS || (config.HEADLESS !== undefined ? (config.HEADLESS ? "y" : "n") : null);
+  const hasDisplay = Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+  const headless = envHeadlessRaw ? /^(1|y|yes|true)$/i.test(envHeadlessRaw) : !hasDisplay;
+
+  const concurrency = Math.max(1,
+    process.env.CONCURRENCY ? parseInt(process.env.CONCURRENCY, 10)
+      : (config.CONCURRENCY !== undefined ? parseInt(config.CONCURRENCY, 10) : 1));
+  const heartbeatMs = Math.max(30, parseInt(process.env.HEARTBEAT_SEC || "180", 10)) * 1000;
+
+  console.log("\n==================== DISTRIBUTED (QUEUE) MODE ====================");
+  console.log(`-> Coordinator : ${coordinatorUrl}`);
+  console.log(`-> This PC id  : ${pcId}`);
+  console.log(`-> Concurrency : ${concurrency}    Headless: ${headless}`);
+  console.log("==================================================================");
+
+  // Fail fast with a clear message if the coordinator URL is wrong/unreachable.
+  let stats;
+  try {
+    stats = await coordinatorRequest(coordinatorUrl, "stats", {});
+  } catch (e) {
+    throw new Error(
+      `Cannot reach the coordinator at COORDINATOR_URL.\n  ${e.message}\n` +
+      "Check the URL, that the Apps Script is deployed as a Web app with access " +
+      "'Anyone', and that the queue sheet is seeded."
+    );
+  }
+  if (stats && stats.counts) console.log(`-> Queue at start: ${JSON.stringify(stats.counts)}`);
+
+  const browser = await chromium.launch({ headless, args: headless ? [] : ["--start-maximized"] });
+  let processed = 0;
+  let failedHere = 0;
+
+  const worker = async (wid) => {
+    while (true) {
+      let claim;
+      try {
+        claim = await coordinatorRequest(coordinatorUrl, "claim", { pc: pcId });
+      } catch (e) {
+        console.warn(`[queue:w${wid}] claim failed: ${e.message}; retrying in 10s`);
+        await sleep(10000);
+        continue;
+      }
+      if (claim.done) {
+        console.log(`[queue:w${wid}] queue drained — no claimable students left. Exiting.`);
+        return;
+      }
+      if (claim.wait) {
+        // Nothing claimable right now, but other PCs still hold leases that may
+        // expire and need redoing. Idle a bit, then ask again.
+        await sleep(8000 + Math.floor(Math.random() * 6000));
+        continue;
+      }
+
+      const student = buildStudentFromClaim(claim);
+      const fullName = `${student.first_name} ${student.last_name}`.trim();
+      const logPrefix = `[${student.student_id}]`;
+      console.log(`\n${logPrefix} [queue:w${wid}] claimed (attempt ${claim.attempt}): ${fullName} / ${student.email}`);
+
+      // Keep the lease alive while this (possibly multi-minute) student runs.
+      const hb = setInterval(() => {
+        coordinatorRequest(coordinatorUrl, "heartbeat", { pc: pcId, row: claim.row, student_id: claim.student_id })
+          .catch(() => {});
+      }, heartbeatMs);
+
+      let result = { cert: "", error: "" };
+      try {
+        result = await runFlowWithFallbacks(browser, student, headless, logPrefix);
+      } catch (e) {
+        result = { cert: "", error: e.message };
+      } finally {
+        clearInterval(hb);
+      }
+
+      if (result.cert) {
+        try {
+          await submitToGoogleForm(browser, fullName, student.email, student.password, result.cert, logPrefix);
+        } catch (errForm) {
+          console.error(`${logPrefix} [queue] Google Form submission failed: ${errForm.message}`);
+        }
+        await coordinatorRequest(coordinatorUrl, "complete", {
+          pc: pcId, row: claim.row, student_id: claim.student_id,
+          email: student.email, password: student.password, certificate_url: result.cert,
+        }).catch((e) => console.warn(`${logPrefix} report 'complete' failed: ${e.message}`));
+        processed++;
+        console.log(`${logPrefix} [queue:w${wid}] DONE -> ${result.cert}`);
+      } else {
+        await coordinatorRequest(coordinatorUrl, "fail", {
+          pc: pcId, row: claim.row, student_id: claim.student_id,
+          error: (result.error || "no certificate captured").slice(0, 300),
+        }).catch((e) => console.warn(`${logPrefix} report 'fail' failed: ${e.message}`));
+        failedHere++;
+        console.log(`${logPrefix} [queue:w${wid}] FAILED -> released for another PC to retry`);
+      }
+    }
+  };
+
+  try {
+    await Promise.all(Array.from({ length: concurrency }, (_, i) => worker(i)));
+  } finally {
+    await browser.close().catch(() => {});
+  }
+  console.log(`\n[queue] This PC finished. Completed: ${processed}, failed/released: ${failedHere}`);
+}
+
 async function main() {
   // Read config.json for default parameters if it exists
   let config = {};
@@ -796,6 +1019,15 @@ async function main() {
     config = JSON.parse(configData);
   } catch (e) {
     // config.json doesn't exist or is invalid, ignore
+  }
+
+  // --- Distributed (queue) mode ---
+  // If a coordinator URL is configured, this PC pulls students from the shared
+  // queue instead of a local range. This is the multi-PC path; it never touches
+  // students.csv and needs no START/END.
+  if (process.env.COORDINATOR_URL || config.COORDINATOR_URL) {
+    await runCoordinatorMode(config);
+    return;
   }
 
   // --- Env-var driven non-interactive mode ---
