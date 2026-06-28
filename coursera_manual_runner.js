@@ -564,9 +564,40 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
     return true;
   };
 
+  // Coursera's cookie-consent dialog ("We Care About Your Privacy" with Accept /
+  // Reject) overlays the page and blocks the Enroll/Continue buttons until it's
+  // dismissed. Click Accept. Best-effort and tolerant of slow (VPN) loads: it
+  // waits up to `timeout` for the banner to appear, retries a couple of times,
+  // and never throws. No-op (fast) when there's no banner.
+  const acceptCookies = async ({ timeout = 8000 } = {}) => {
+    const deadline = Date.now() + timeout;
+    do {
+      // OneTrust's standard accept button id is the most reliable anchor; fall
+      // back to an "Accept"/"Accept all cookies" button by its accessible name.
+      const byId = page.locator("#onetrust-accept-btn-handler").filter({ visible: true }).first();
+      const byText = page
+        .getByRole("button", { name: /^accept( all( cookies)?)?$/i })
+        .filter({ visible: true })
+        .first();
+      for (const [loc, label] of [[byId, "onetrust"], [byText, "accept"]]) {
+        if (await loc.count().catch(() => 0)) {
+          try {
+            await loc.click({ timeout: 4000 });
+            log(`accepted cookie consent (${label})`);
+            await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
+            return true;
+          } catch (e) { /* try the other locator / next poll */ }
+        }
+      }
+      await page.waitForTimeout(500);
+    } while (Date.now() < deadline);
+    return false;
+  };
+
   // 1) Landing page -> Enroll for free
   await goto(COURSE_URL);
   await observer.capture("landing");
+  await acceptCookies();  // dismiss the cookie banner before it blocks anything
   await clickRole("button", /enroll for free/i, { timeout: 25000 });
 
   // 2) Sign-up form
@@ -609,6 +640,9 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   // 3) Finish enrollment: the success screen shows a "Continue" (or "Go to course") that
   //    enrolls and drops you into the course. It can take ~10s to appear, so wait generously
   //    and then wait to actually land on a /learn/ or /home page.
+  //    The cookie-consent dialog frequently appears on THIS success screen and
+  //    sits on top of the Continue button — accept it first so the click lands.
+  await acceptCookies({ timeout: 6000 });
   await clickRole("button", /^(continue|go to course|start learning)$/i, { optional: true, timeout: 25000 });
   await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
   await page.waitForURL(/\/(learn|home)\//, { timeout: 20000 }).catch(() => {});
