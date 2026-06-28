@@ -203,9 +203,13 @@ function _json(obj) {
 }
 
 /**
- * One-time helper: writes the header row and resets every data row to pending
- * (clears owner/lease/status/etc). Run from the Apps Script editor after you
- * paste/import the student_id + full_name columns. Safe to re-run to reset.
+ * One-time helper: writes the header row and marks any row with a BLANK status
+ * as "pending". It does NOT touch rows that already have a status (e.g. "done"
+ * rows pre-filled by make_queue_seed.py from your already-completed list), nor
+ * any email/password/certificate values. Safe to re-run.
+ *
+ * If you imported a seed that already includes the status column, you can skip
+ * this entirely — it's only needed when you seeded just student_id + full_name.
  */
 function initQueue() {
   var sh = _sheet();
@@ -215,9 +219,55 @@ function initQueue() {
   ]]);
   var n = sh.getLastRow() - 1;
   if (n > 0) {
-    var blank = [];
-    for (var i = 0; i < n; i++) blank.push(["pending", "", 0, "", "", "", "", "", "", ""]);
-    sh.getRange(2, COL.STATUS, n, LAST_COL - COL.STATUS + 1).setValues(blank);
+    var rng = sh.getRange(2, COL.STATUS, n, 1);
+    var st = rng.getValues();
+    for (var i = 0; i < n; i++) {
+      if (String(st[i][0] || "").trim() === "") st[i][0] = "pending";
+    }
+    rng.setValues(st);
   }
   SpreadsheetApp.flush();
+}
+
+/**
+ * Optional admin helper: re-mark already-completed people as "done" from the
+ * Google Form responses, matched by full name. Paste your responses sheet ID
+ * below and run this once if you ever re-seed and need to re-apply completions
+ * without regenerating the CSV. Leave RESPONSES_SHEET_ID empty to no-op.
+ */
+function applyDoneFromResponses() {
+  var RESPONSES_SHEET_ID = ""; // <-- responses spreadsheet ID, or leave ""
+  if (!RESPONSES_SHEET_ID) throw new Error("Set RESPONSES_SHEET_ID first.");
+  var norm = function (s) { return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); };
+
+  var rsh = SpreadsheetApp.openById(RESPONSES_SHEET_ID).getSheets()[0];
+  var data = rsh.getDataRange().getValues();
+  var head = data[0].map(function (h) { return String(h).toLowerCase().replace(/[^a-z]/g, ""); });
+  var ci = function (n) { return head.indexOf(n); };
+  var nameI = ci("fullname"), emailI = ci("email"), passI = ci("password"),
+      urlI = head.indexOf("url") >= 0 ? head.indexOf("url") : ci("certificateurl");
+  var done = {};
+  for (var r = 1; r < data.length; r++) {
+    var key = norm(data[r][nameI]);
+    if (key) done[key] = [data[r][emailI] || "", data[r][passI] || "", data[r][urlI] || ""];
+  }
+
+  var sh = _sheet();
+  var n = sh.getLastRow() - 1;
+  if (n < 1) return;
+  var grid = sh.getRange(2, 1, n, LAST_COL).getValues();
+  var updated = 0;
+  for (var i = 0; i < n; i++) {
+    var d = done[norm(grid[i][COL.NAME - 1])];
+    if (d && String(grid[i][COL.STATUS - 1]).toLowerCase() !== "done") {
+      grid[i][COL.STATUS - 1] = "done";
+      grid[i][COL.EMAIL - 1] = d[0];
+      grid[i][COL.PASSWORD - 1] = d[1];
+      grid[i][COL.CERT - 1] = d[2];
+      updated++;
+    }
+  }
+  sh.getRange(2, 1, n, LAST_COL).setValues(grid);
+  SpreadsheetApp.flush();
+  Logger.log("Marked done: " + updated);
 }

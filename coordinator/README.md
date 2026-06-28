@@ -29,19 +29,23 @@ You never assign ranges. Start as many PCs as you want; they share the one queue
 2. **Seed the students.** On any machine with `names.xlsx`:
    ```bash
    pip install openpyxl
-   python3 make_queue_seed.py        # writes queue_seed.csv
+   # Pre-mark everyone who already finished (matched by name to your Google
+   # Form responses sheet) as "done" so the PCs never redo them:
+   python3 make_queue_seed.py --done "https://docs.google.com/spreadsheets/d/<RESPONSES_ID>/edit"
+   # ...or, if nobody is done yet, just:  python3 make_queue_seed.py
    ```
+   This writes `queue_seed.csv` with the full column layout (status already
+   filled: `done` for completed people, `pending` for the rest).
    In the Sheet: click cell **A1** → **File → Import → Upload** `queue_seed.csv`
-   → **Import location: "Replace data at selected cell"**. You should now have
-   `student_id` in column A and `full_name` in column B.
+   → **Import location: "Replace data at selected cell"**.
 
 3. **Add the script.** In the Sheet: **Extensions → Apps Script**. Delete the
    placeholder, paste the entire contents of [`Code.gs`](./Code.gs), and **Save**.
 
-4. **Initialize the queue.** In the Apps Script editor, pick the function
-   `initQueue` from the dropdown and click **Run** once. (Approve the
-   permissions prompt the first time.) This writes the header row and marks every
-   student `pending`.
+4. **Initialize the queue.** Because the seed already has the `status` column,
+   you can **skip this step**. (If you seeded only `student_id`+`full_name`, run
+   `initQueue` once from the Apps Script editor — it only fills blank statuses
+   and never overwrites `done` rows.)
 
 5. **Deploy as a web app.** **Deploy → New deployment → type: Web app**.
    - *Execute as*: **Me**
