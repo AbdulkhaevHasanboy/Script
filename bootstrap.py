@@ -188,6 +188,16 @@ else:
 if not (run(with_deps) or run(plain)):
     sys.exit("Error installing Playwright browsers.")
 
+# If CHANNEL=chrome (real Google Chrome — much less CAPTCHA-prone than bundled
+# Chromium), install that real browser too.
+_channel = os.environ.get("CHANNEL", "").strip().lower()
+if _channel in ("chrome", "chrome-beta", "msedge", "msedge-beta"):
+    print(f"Installing real browser channel '{_channel}' (lower CAPTCHA rate)...")
+    if os.path.exists(cli):
+        run(f'node "{cli}" install {_channel} --with-deps') or run(f'node "{cli}" install {_channel}')
+    else:
+        run(f"npx playwright install {_channel} --with-deps") or run(f"npx playwright install {_channel}")
+
 # In distributed mode the student list comes from the coordinator queue, so a
 # local students.csv is not needed.
 if not os.environ.get("COORDINATOR_URL") and not os.path.exists("students.csv"):

@@ -65,6 +65,28 @@ const STEALTH_SCRIPT = `
   } catch (e) {}
 `;
 
+// Build Chromium launch options tuned to look like a real browser to anti-bot
+// systems (Arkose/FunCaptcha on Coursera signup). The big levers:
+//   - --disable-blink-features=AutomationControlled removes the engine-level
+//     `navigator.webdriver` automation signal (stronger than patching it in JS).
+//   - CHANNEL=chrome launches the REAL installed Google Chrome instead of the
+//     bundled Chromium (very different, less-flagged fingerprint). Install it
+//     once with: npx playwright install chrome
+//   - Headful (HEADLESS=n) is far less detectable than headless. On a server with
+//     no display, run under a virtual one (xvfb-run) to stay headful.
+function chromiumLaunchOptions(headless) {
+  const args = [
+    "--disable-blink-features=AutomationControlled",
+    "--disable-features=IsolateOrigins,site-per-process",
+    "--no-sandbox",
+  ];
+  if (!headless) args.push("--start-maximized");
+  const opts = { headless, args };
+  const channel = process.env.CHANNEL || process.env.BROWSER_CHANNEL;
+  if (channel) opts.channel = channel; // e.g. CHANNEL=chrome -> real Google Chrome
+  return opts;
+}
+
 // --- Course-specific constants for AUTO mode (derived from the recording) ---
 const COURSE_SLUG = "build-a-computer-vision-app-with-azure-cognitive-services";
 const LEARN_BASE = `https://www.coursera.org/learn/${COURSE_SLUG}`;
@@ -908,7 +930,7 @@ async function runCoordinatorMode(config) {
   }
   if (stats && stats.counts) console.log(`-> Queue at start: ${JSON.stringify(stats.counts)}`);
 
-  const browser = await chromium.launch({ headless, args: headless ? [] : ["--start-maximized"] });
+  const browser = await chromium.launch(chromiumLaunchOptions(headless));
   let processed = 0;
   let failedHere = 0;
 
@@ -1161,10 +1183,7 @@ async function main() {
     }
   }
 
-  const browser = await chromium.launch({
-    headless: headless,
-    args: headless ? [] : ["--start-maximized"],
-  });
+  const browser = await chromium.launch(chromiumLaunchOptions(headless));
 
   let recordingDone = false;
   try {
