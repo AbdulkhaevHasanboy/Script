@@ -557,9 +557,14 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   log(`after sign-up, URL: ${page.url()}`);
   await observer.capture("after-signup");
 
-  // Accept the Terms-of-Use consent dialog if Coursera popped one up. This is a
-  // no-op (returns fast) when no dialog appeared, so signup is unaffected either way.
-  await acceptTermsDialog();
+  // Only touch the page further if Coursera EXPLICITLY asked for Terms-of-Use
+  // acceptance (the URL gains showTouAccept, which only happens AFTER a successful
+  // signup). On a normal signup — or a CAPTCHA challenge — this is skipped
+  // entirely, so the signup path is byte-identical to the original. Set
+  // SKIP_TOU=y to disable even this.
+  if (!/^(1|y|yes|true)$/i.test(process.env.SKIP_TOU || "") && page.url().includes("showTouAccept")) {
+    await acceptTermsDialog();
+  }
 
   // Check if we got blocked or CAPTCHAd
   const currentUrl = page.url();
