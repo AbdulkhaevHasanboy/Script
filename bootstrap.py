@@ -17,10 +17,9 @@ import zipfile
 COORDINATOR_URL = "https://script.google.com/macros/s/AKfycbzl3TijKis8trT9-_K8EMDwEj6a0tm7itxcV9w8nlZPO0PkaHo1lc2JGQCrHLlCO8WuEQ/exec"
 PC_ID = ""           # optional friendly name for this PC in the dashboard
 # -----------------------------------------------------------------------------
-# Single-PC range (used ONLY when COORDINATOR_URL is ""). 1-based, inclusive;
-# set END = None to go to the end of the list. Override START/END in config.json.
-START = 1176
-END = 1250
+# This bootstrap runs in DISTRIBUTED (shared-queue) mode: every PC/Colab pulls
+# the next student from the Google Sheet queue above. There is NO START/END to
+# set and no duplicates — just run this cell on each machine.
 CONCURRENCY = 1      # how many browsers run in parallel (per PC)
 # --- Anti-CAPTCHA browser settings -------------------------------------------
 # CHANNEL="chrome" launches REAL Google Chrome (much less CAPTCHA-prone than the
@@ -284,32 +283,29 @@ def run_project(base):
     # Bring in the data files the repo no longer ships (students.csv, etc.).
     provision_data_files(project_dir)
 
-    # Pass the Colab-side knobs through as env vars; the runner reads START/END/
-    # CONCURRENCY/HEADLESS from the environment first, then config.json.
+    # Pass the Colab-side knobs through as env vars. The runner pulls the student
+    # list from the shared coordinator queue (no START/END), reading the rest from
+    # the environment first, then config.json.
     env = dict(os.environ)
-    env["START"] = str(START)
-    if END is not None:
-        env["END"] = str(END)
-    else:
-        env.pop("END", None)
     env["CONCURRENCY"] = str(CONCURRENCY)
     env["HEADLESS"] = "y" if HEADLESS else "n"
     if CHANNEL:
         env["CHANNEL"] = CHANNEL
 
-    # Distributed mode: hand the coordinator URL (and optional PC id) to the
-    # runner, which then ignores START/END and pulls from the shared queue.
-    if COORDINATOR_URL:
-        env["COORDINATOR_URL"] = COORDINATOR_URL
-        if PC_ID:
-            env["PC_ID"] = PC_ID
-        print(f"\n=== Running {' '.join([sys.executable, 'run_on_colab.py'])} in {project_dir} "
-              f"(DISTRIBUTED queue mode, CONCURRENCY={CONCURRENCY}, HEADLESS={HEADLESS}) ===",
-              flush=True)
-    else:
-        print(f"\n=== Running {' '.join([sys.executable, 'run_on_colab.py'])} in {project_dir} "
-              f"(START={START}, END={END}, CONCURRENCY={CONCURRENCY}, "
-              f"HEADLESS={HEADLESS}) ===", flush=True)
+    # Distributed (shared-queue) mode is required: hand the coordinator URL (and
+    # optional PC id) to the runner, which then pulls students from the Sheet.
+    if not COORDINATOR_URL:
+        raise SystemExit(
+            "COORDINATOR_URL is empty. Set it at the top of bootstrap.py to your "
+            "coordinator Web app URL (see coordinator/README.md). This bootstrap "
+            "runs in shared-queue mode and has no START/END."
+        )
+    env["COORDINATOR_URL"] = COORDINATOR_URL
+    if PC_ID:
+        env["PC_ID"] = PC_ID
+    print(f"\n=== Running {' '.join([sys.executable, 'run_on_colab.py'])} in {project_dir} "
+          f"(DISTRIBUTED queue mode, CONCURRENCY={CONCURRENCY}, HEADLESS={HEADLESS}, "
+          f"CHANNEL={CHANNEL or 'chromium'}) ===", flush=True)
 
     cmd = [sys.executable, "run_on_colab.py"]
 
