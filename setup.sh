@@ -100,9 +100,9 @@ if [ -d node_modules/.bin ]; then
 fi
 
 # --- 5. Playwright browsers + system libraries ---------------------------
-# The runner falls back across Chromium -> Firefox -> WebKit, so install all
-# three. --with-deps pulls in the OS libraries they need (uses sudo internally).
-BROWSERS="chromium firefox webkit"
+# The runner uses Chromium only. --with-deps pulls in the OS libraries it needs
+# (uses sudo internally).
+BROWSERS="chromium"
 PW_CLI="node_modules/playwright/cli.js"
 
 # Prefer calling the CLI through `node` so a missing +x bit on the .bin shim can

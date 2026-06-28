@@ -5,7 +5,6 @@ const readline = require("node:readline/promises");
 const { stdin: input, stdout: output } = require("node:process");
 const { execSync } = require("node:child_process");
 const { chromium } = require("playwright-extra");
-const { firefox, webkit } = require("playwright");
 const stealth = require("puppeteer-extra-plugin-stealth")();
 
 // Apply the stealth plugin: spoofs navigator.webdriver, plugins, WebGL, etc.
@@ -849,8 +848,7 @@ function buildStudentFromClaim(claim) {
   return student;
 }
 
-// Run the whole course flow for one student across Chromium -> Firefox -> WebKit,
-// returning { cert, error }. Mirrors the AUTO-mode per-student logic.
+// Run the whole course flow for one student in Chromium, returning { cert, error }.
 async function runFlowWithFallbacks(browser, student, headless, logPrefix) {
   let cert = "";
   let error = "";
@@ -868,36 +866,6 @@ async function runFlowWithFallbacks(browser, student, headless, logPrefix) {
     console.warn(`\n${logPrefix} [queue] Chromium flow stopped: ${err.message}`);
   } finally {
     await context.close().catch(() => {});
-  }
-
-  if (!cert) {
-    const fallbacks = [
-      { name: "Firefox", launcher: firefox, ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" },
-      { name: "WebKit", launcher: webkit, ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15" },
-    ];
-    for (const fb of fallbacks) {
-      console.log(`\n${logPrefix} [queue] Fallback: retrying in ${fb.name}...`);
-      try {
-        const fbBrowser = await fb.launcher.launch({ headless });
-        const fContext = await fbBrowser.newContext({
-          viewport: { width: 1920, height: 1080 },
-          userAgent: fb.ua,
-          locale: "en-US",
-        });
-        await fContext.addInitScript(STEALTH_SCRIPT);
-        const fPage = await fContext.newPage();
-        try {
-          cert = await runAutomatedFlow(fPage, student, logPrefix);
-        } finally {
-          await fContext.close().catch(() => {});
-          await fbBrowser.close().catch(() => {});
-        }
-        if (cert) { error = ""; break; }
-      } catch (errF) {
-        error = errF.message;
-        console.warn(`\n${logPrefix} [queue] ${fb.name} fallback stopped: ${errF.message}`);
-      }
-    }
   }
   return { cert: cert || "", error };
 }
@@ -1238,49 +1206,6 @@ async function main() {
           console.warn(`\n${logPrefix} [AUTO] Chromium flow stopped: ${err.message}`);
         } finally {
           await context.close().catch(() => {});
-        }
-
-        // Fallback to other browsers if Chromium failed to get a certificate
-        if (!cert) {
-          const fallbacks = [
-            { name: "Firefox", launcher: firefox },
-            { name: "WebKit", launcher: webkit }
-          ];
-
-          for (const fallback of fallbacks) {
-            console.log(`\n${logPrefix} [AUTO] Fallback: Retrying flow in ${fallback.name}...`);
-            try {
-              const fb = await fallback.launcher.launch({
-                headless: headless,
-              });
-              let fUserAgent = USER_AGENT;
-              if (fallback.name === "Firefox") {
-                fUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0";
-              } else if (fallback.name === "WebKit") {
-                fUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15";
-              }
-
-              const fContext = await fb.newContext({
-                viewport: { width: 1920, height: 1080 },
-                userAgent: fUserAgent,
-                locale: "en-US",
-              });
-              await fContext.addInitScript(STEALTH_SCRIPT);
-              const fPage = await fContext.newPage();
-              try {
-                cert = await runAutomatedFlow(fPage, student, logPrefix);
-              } finally {
-                await fContext.close().catch(() => {});
-                await fb.close().catch(() => {});
-              }
-              if (cert) {
-                console.log(`\n${logPrefix} [AUTO] Success in ${fallback.name}!`);
-                break;
-              }
-            } catch (errF) {
-              console.warn(`\n${logPrefix} [AUTO] ${fallback.name} fallback flow stopped: ${errF.message}`);
-            }
-          }
         }
 
         student.certificate_url = cert || "";
@@ -1735,48 +1660,6 @@ async function main() {
           cert = await runAutomatedFlow(page, student);
         } catch (err) {
           console.warn(`\n[AUTO] Chromium flow stopped: ${err.message}`);
-        }
-
-        if (!cert) {
-          const fallbacks = [
-            { name: "Firefox", launcher: firefox },
-            { name: "WebKit", launcher: webkit }
-          ];
-
-          for (const fallback of fallbacks) {
-            console.log(`\n[AUTO] Fallback: Retrying flow in ${fallback.name}...`);
-            try {
-              const fb = await fallback.launcher.launch({
-                headless: headless,
-              });
-               let fUserAgent = USER_AGENT;
-               if (fallback.name === "Firefox") {
-                 fUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0";
-               } else if (fallback.name === "WebKit") {
-                 fUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15";
-               }
-
-               const fContext = await fb.newContext({
-                 viewport: { width: 1920, height: 1080 },
-                 userAgent: fUserAgent,
-                 locale: "en-US",
-               });
-               await fContext.addInitScript(STEALTH_SCRIPT);
-              const fPage = await fContext.newPage();
-              try {
-                cert = await runAutomatedFlow(fPage, student);
-              } finally {
-                await fContext.close().catch(() => {});
-                await fb.close().catch(() => {});
-              }
-              if (cert) {
-                console.log(`\n[AUTO] Success in ${fallback.name}!`);
-                break;
-              }
-            } catch (errF) {
-              console.warn(`\n[AUTO] ${fallback.name} fallback flow stopped: ${errF.message}`);
-            }
-          }
         }
 
         student.certificate_url = cert || "";

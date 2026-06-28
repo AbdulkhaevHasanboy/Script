@@ -177,7 +177,7 @@ if os.path.isdir(bin_dir):
         except OSError:
             pass
 
-browsers = "chromium firefox webkit"
+browsers = "chromium"
 cli = os.path.join(HERE, "node_modules", "playwright", "cli.js")
 if os.path.exists(cli):
     with_deps = f'node "{cli}" install {browsers} --with-deps'
