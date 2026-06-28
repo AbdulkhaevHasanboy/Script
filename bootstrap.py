@@ -28,6 +28,14 @@ CONCURRENCY = 1      # how many browsers run in parallel (per PC)
 # virtual display (Xvfb) — you don't need to do anything.
 CHANNEL = "chrome"
 HEADLESS = False     # False = headful (least CAPTCHA; auto-uses Xvfb on Colab)
+# --- Proxy (the real fix for Colab CAPTCHA) ----------------------------------
+# Colab runs on Google DATACENTER IPs, which Coursera challenges on signup even
+# with real Chrome. The only thing that changes that is exiting through a
+# different IP. Put a RESIDENTIAL proxy here to route the browser through it,
+# e.g. "http://user:pass@host:port" or "socks5://user:pass@host:port".
+# Leave "" to use the machine's own IP (fine on real PCs/phones; CAPTCHA-prone
+# on Colab). Use a per-session/rotating residential endpoint for best results.
+PROXY = ""
 # ===================================================================
 
 # The repo is now a full Node.js project at its root (runner + node_modules
@@ -290,6 +298,14 @@ def run_project(base):
     env["HEADLESS"] = "y" if HEADLESS else "n"
     if CHANNEL:
         env["CHANNEL"] = CHANNEL
+    # Route the browser through a residential proxy (the real fix for Colab's
+    # datacenter-IP CAPTCHA). On Linux, Chromium reads these standard proxy env
+    # vars for its system proxy, so the browser exits through PROXY's IP.
+    if PROXY:
+        for _k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+                   "http_proxy", "https_proxy", "all_proxy"):
+            env[_k] = PROXY
+        print(f"-> Routing browser traffic through proxy: {PROXY.split('@')[-1]}")
 
     # Distributed (shared-queue) mode is required: hand the coordinator URL (and
     # optional PC id) to the runner, which then pulls students from the Sheet.
