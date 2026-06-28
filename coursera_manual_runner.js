@@ -606,10 +606,12 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   await observer.capture("landing");
   await acceptCookies();  // dismiss the cookie banner before it blocks anything
   await clickRole("button", /enroll for free/i, { timeout: 25000 });
-  // On slow (VPN) links the first click can be swallowed before the page is
-  // interactive, so the sign-up form never opens. In slow mode (SLOW_FACTOR >= 2)
-  // give it a best-effort second click — a no-op/skip if the form already opened.
-  if (TF >= 2 && !(await page.locator('input[name="email"]').first().isVisible().catch(() => false))) {
+  // On slow (VPN) links the first click often registers but doesn't actually
+  // open the sign-up form. In slow mode (SLOW_FACTOR >= 2) always give it a
+  // second click after a short settle — optional, so it's a no-op/skip if the
+  // form already opened (the button is gone once the form is up).
+  if (TF >= 2) {
+    await page.waitForTimeout(1500 * TF);
     await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
   }
 
