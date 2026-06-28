@@ -514,12 +514,20 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
     if (OBSERVE_VERBOSE) await observer.capture(`goto-${new URL(url).pathname}`);
   };
 
-  // Coursera sometimes interrupts the post-signup/enroll flow with a "We've
+  // Coursera SOMETIMES interrupts the post-signup/enroll flow with a "We've
   // updated our Terms of Use" consent dialog (the URL gains showTouAccept=1).
-  // Nothing else on the page is clickable until it's accepted. Best-effort:
-  // tick any required checkbox, click Accept/Agree, and never throw.
-  const acceptTermsDialog = async ({ timeout = 8000 } = {}) => {
+  // It often does NOT appear at all. This is self-gating: it does a quick,
+  // bounded check and returns immediately when no accept control is on screen,
+  // so signup behaves identically whether or not the dialog shows. Never throws.
+  const acceptTermsDialog = async () => {
     const accept = /^(accept|i accept|accept (and continue|& continue)|agree|i agree)$/i;
+    const btn = page.getByRole("button", { name: accept }).filter({ visible: true }).first();
+    const present = await btn
+      .waitFor({ state: "visible", timeout: 2500 })
+      .then(() => true)
+      .catch(() => false);
+    if (!present) return false;  // no dialog — nothing to do, fall straight through
+    // Tick any required consent checkbox in the surrounding dialog, then accept.
     const dialog = page.getByRole("dialog").filter({ visible: true }).first();
     if (await dialog.count().catch(() => 0)) {
       const boxes = dialog.locator('input[type="checkbox"]');
@@ -528,16 +536,10 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
         await boxes.nth(i).check({ force: true, timeout: 2000 }).catch(() => {});
       }
     }
-    // The accept control is usually a <button>, occasionally a link styled as one.
-    let clicked = await clickRole("button", accept, { optional: true, timeout });
-    if (!clicked) {
-      clicked = await clickRole("link", accept, { optional: true, timeout: 2000 });
-    }
-    if (clicked) {
-      log("accepted Terms of Use dialog");
-      await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
-    }
-    return clicked;
+    await btn.click({ timeout: 5000 }).catch(() => {});
+    log("accepted Terms of Use dialog");
+    await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
+    return true;
   };
 
   // 1) Landing page -> Enroll for free
@@ -555,11 +557,9 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   log(`after sign-up, URL: ${page.url()}`);
   await observer.capture("after-signup");
 
-  // Accept the Terms-of-Use consent dialog if Coursera popped one up (signalled
-  // by showTouAccept=1 in the URL). It blocks the enroll/continue buttons.
-  if (page.url().includes("showTouAccept") || page.url().includes("authMode=signupSuccess")) {
-    await acceptTermsDialog();
-  }
+  // Accept the Terms-of-Use consent dialog if Coursera popped one up. This is a
+  // no-op (returns fast) when no dialog appeared, so signup is unaffected either way.
+  await acceptTermsDialog();
 
   // Check if we got blocked or CAPTCHAd
   const currentUrl = page.url();
@@ -582,7 +582,6 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   // 3) Finish enrollment: the success screen shows a "Continue" (or "Go to course") that
   //    enrolls and drops you into the course. It can take ~10s to appear, so wait generously
   //    and then wait to actually land on a /learn/ or /home page.
-  await acceptTermsDialog({ timeout: 4000 });  // in case the ToU dialog appears a beat later
   await clickRole("button", /^(continue|go to course|start learning)$/i, { optional: true, timeout: 25000 });
   await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
   await page.waitForURL(/\/(learn|home)\//, { timeout: 20000 }).catch(() => {});
