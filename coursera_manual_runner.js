@@ -1016,6 +1016,10 @@ async function main() {
     // config.json doesn't exist or is invalid, ignore
   }
 
+  // Let config.json bake in the browser channel (e.g. "chrome" for real Google
+  // Chrome) the same way it does HEADLESS/COORDINATOR_URL. Env still wins.
+  if (config.CHANNEL && !process.env.CHANNEL) process.env.CHANNEL = config.CHANNEL;
+
   // --- Distributed (queue) mode ---
   // If a coordinator URL is configured, this PC pulls students from the shared
   // queue instead of a local range. This is the multi-PC path; it never touches
