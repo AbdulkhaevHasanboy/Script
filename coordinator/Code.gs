@@ -93,6 +93,7 @@ function _claim(req) {
     var meta = sh.getRange(2, COL.STATUS, n, COL.LEASE - COL.STATUS + 1).getValues();
     var pick = -1;
     var anyActive = false;
+    var giveUp = []; // expired + exhausted rows to mark terminally failed
     for (var i = 0; i < n; i++) {
       var status = String(meta[i][0] || "").toLowerCase();       // C
       var attempts = Number(meta[i][COL.ATTEMPTS - COL.STATUS]) || 0; // E
@@ -100,16 +101,33 @@ function _claim(req) {
 
       if (status === "" || status === "pending") { pick = i; break; }
       if (status === "in-progress") {
-        if (lease && lease < now) { pick = i; break; } // crashed PC -> reclaim
-        anyActive = true;
+        if (lease && lease < now) {
+          // The PC holding this crashed / timed out. Reclaim ONLY if attempts
+          // remain; otherwise give up so it can't loop forever (this is what let
+          // attempts climb past MAX_ATTEMPTS before).
+          if (attempts < MAX_ATTEMPTS) { pick = i; break; }
+          giveUp.push(i);
+        } else {
+          anyActive = true; // still being worked on under a live lease
+        }
       } else if (status === "failed" && attempts < MAX_ATTEMPTS) {
         pick = i; break;
       }
     }
 
+    // Mark abandoned-and-exhausted rows as terminally failed: visible in the
+    // dashboard, never retried, lease cleared. (Run retryFailed() to revive them
+    // later, e.g. after switching to a proxy / clean IP.)
+    for (var g = 0; g < giveUp.length; g++) {
+      var gr = giveUp[g] + 2;
+      sh.getRange(gr, COL.STATUS).setValue("failed");
+      sh.getRange(gr, COL.LEASE, 1, 3).setValues([["", now, "exhausted: max attempts reached"]]);
+    }
+
     if (pick === -1) {
       // Nothing to hand out. If others still hold live leases, tell the caller to
       // wait (they may yet fail and need redoing); otherwise the queue is drained.
+      if (giveUp.length) SpreadsheetApp.flush();
       return anyActive ? { wait: true } : { done: true };
     }
 
@@ -200,6 +218,37 @@ function _json(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Admin helper: revive students that ended up "failed" (e.g. CAPTCHA'd to death
+ * on a bad IP) by resetting them to pending with a fresh attempt count. Run this
+ * from the Apps Script editor AFTER you fix the underlying cause (proxy / clean
+ * IP / real machines). Also un-sticks any "in-progress" row whose lease expired.
+ */
+function retryFailed() {
+  var sh = _sheet();
+  var n = sh.getLastRow() - 1;
+  if (n < 1) return;
+  var now = Date.now();
+  var grid = sh.getRange(2, COL.STATUS, n, COL.LEASE - COL.STATUS + 1).getValues(); // C..G
+  var revived = 0;
+  for (var i = 0; i < n; i++) {
+    var status = String(grid[i][0] || "").toLowerCase();
+    var lease = Number(grid[i][COL.LEASE - COL.STATUS]) || 0;
+    var stale = status === "failed" || (status === "in-progress" && lease && lease < now);
+    if (stale) {
+      grid[i][0] = "pending";                       // C status
+      grid[i][COL.OWNER - COL.STATUS] = "";         // D owner
+      grid[i][COL.ATTEMPTS - COL.STATUS] = 0;       // E attempts
+      grid[i][COL.CLAIMED_AT - COL.STATUS] = "";    // F claimed_at
+      grid[i][COL.LEASE - COL.STATUS] = "";         // G lease_expires
+      revived++;
+    }
+  }
+  sh.getRange(2, COL.STATUS, n, COL.LEASE - COL.STATUS + 1).setValues(grid);
+  SpreadsheetApp.flush();
+  Logger.log("Revived failed/stale -> pending: " + revived);
 }
 
 /**
