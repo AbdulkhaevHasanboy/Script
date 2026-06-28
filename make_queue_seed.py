@@ -108,6 +108,10 @@ def main():
     ap.add_argument("--out", default="queue_seed.csv")
     ap.add_argument("--done", default=None,
                     help="Google Sheets URL/ID or CSV of already-completed people")
+    ap.add_argument("--skip-first", type=int, default=0,
+                    help="Reserve the first N students (by roster order) so the "
+                         "queue never hands them out — leave them to your old "
+                         "START/END script. They are marked 'reserved'.")
     # positional back-compat: make_queue_seed.py [names.xlsx] [out.csv]
     ap.add_argument("pos", nargs="*")
     args = ap.parse_args()
@@ -116,15 +120,22 @@ def main():
 
     roster = load_roster(names_file)
     done = load_done(args.done) if args.done else {}
+    skip_first = max(0, args.skip_first)
 
     n_done = 0
+    n_reserved = 0
     rows = []
-    for sid, name in roster:
+    for idx, (sid, name) in enumerate(roster, start=1):  # 1-based, matches START/END
         d = done.get(norm(name))
         if d:
+            # Already completed: keep it 'done' (with creds) wherever it is.
             email, password, cert = d
             rows.append([sid, name, "done", "", 1, "", "", "", "", email, password, cert])
             n_done += 1
+        elif idx <= skip_first:
+            # First N students belong to the old script — never claim them.
+            rows.append([sid, name, "reserved", "", 0, "", "", "", "", "", "", ""])
+            n_reserved += 1
         else:
             rows.append([sid, name, "pending", "", 0, "", "", "", "", "", "", ""])
 
@@ -134,8 +145,10 @@ def main():
         w.writerows(rows)
 
     print(f"Wrote {len(rows)} students to {out_file}")
-    print(f"  already done (skipped): {n_done}")
-    print(f"  to process (pending)  : {len(rows) - n_done}")
+    print(f"  already done (skipped)      : {n_done}")
+    if n_reserved:
+        print(f"  reserved for old script     : {n_reserved} (first {skip_first} by order)")
+    print(f"  to process by the queue     : {len(rows) - n_done - n_reserved}")
     if done:
         matched_names = sum(1 for _, name in roster if norm(name) in done)
         unmatched = len(done) - len({norm(name) for _, name in roster if norm(name) in done})

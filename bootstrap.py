@@ -14,7 +14,7 @@ import zipfile
 # README.md for the 5-minute setup). When set, START/END below are IGNORED and
 # students.csv is not needed — each PC just claims the next student automatically.
 # Leave it "" to use the classic single-PC START/END range instead.
-COORDINATOR_URL = ""
+COORDINATOR_URL = "https://script.google.com/macros/s/AKfycbzl3TijKis8trT9-_K8EMDwEj6a0tm7itxcV9w8nlZPO0PkaHo1lc2JGQCrHLlCO8WuEQ/exec"
 PC_ID = ""           # optional friendly name for this PC in the dashboard
 # -----------------------------------------------------------------------------
 # Single-PC range (used ONLY when COORDINATOR_URL is ""). 1-based, inclusive;
