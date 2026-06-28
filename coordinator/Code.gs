@@ -9,16 +9,13 @@
  *                 this safe even with many PCs hitting it at once.
  *   - heartbeat : extend the lease while a (multi-minute) student is running.
  *   - complete  : mark done + store the generated email/password/certificate.
- *   - fail      : mark failed (records when + why) and put it on a short cooldown
- *                 so other students go first; it is retried afterwards by any PC.
- *                 A student is NEVER permanently abandoned — it stays in rotation
- *                 until it succeeds, so every student eventually gets its cert.
+ *   - fail      : mark failed (records when + why); the student becomes
+ *                 claimable again so another PC redoes it (up to MAX_ATTEMPTS).
  *   - stats     : counts per status (used as a health check + dashboard).
  *
  * A student is "claimable" when it is pending, OR in-progress with an EXPIRED
- * lease (its PC crashed), OR failed and past its retry cooldown. That gives you
- * crash-safety for free (a dead PC's work is auto-reclaimed after LEASE_MINUTES)
- * and guarantees eventual completion (failures are skipped, then retried).
+ * lease (its PC crashed), OR failed with attempts < MAX_ATTEMPTS. That gives you
+ * crash-safety for free: a dead PC's work is auto-reclaimed after LEASE_MINUTES.
  *
  * SHEET LAYOUT (sheet name in QUEUE_SHEET, header row 1):
  *   A student_id | B full_name | C status | D owner | E attempts | F claimed_at
@@ -31,9 +28,7 @@
 // ----------------------------- CONFIG -----------------------------
 var QUEUE_SHEET = "Queue";   // tab name holding the student rows
 var LEASE_MINUTES = 25;      // a claim is valid this long without a heartbeat
-var RETRY_COOLDOWN_MINUTES = 10; // after a failure, wait this long before the
-                             // student is retried (skipped meanwhile, never given
-                             // up — it keeps retrying until it gets the cert)
+var MAX_ATTEMPTS = 4;        // give up on a student after this many failed tries
 var TOKEN = "";              // optional shared secret; "" = no auth. If set, the
                              // runner must send the same COORDINATOR_TOKEN.
 // Column indexes (1-based) — keep in sync with the layout above.
@@ -97,26 +92,24 @@ function _claim(req) {
     // Read only the decision columns (status..lease) for a fast scan.
     var meta = sh.getRange(2, COL.STATUS, n, COL.LEASE - COL.STATUS + 1).getValues();
     var pick = -1;
-    var anyActive = false; // live in-progress OR failed-still-cooling => retry later
+    var anyActive = false;
     for (var i = 0; i < n; i++) {
       var status = String(meta[i][0] || "").toLowerCase();       // C
-      var lease = Number(meta[i][COL.LEASE - COL.STATUS]) || 0;   // G
-      // For in-progress, G is the lease end. For failed, G is "retry-not-before".
+      var attempts = Number(meta[i][COL.ATTEMPTS - COL.STATUS]) || 0; // E
+      var lease = Number(meta[i][COL.LEASE - COL.STATUS]) || 0;       // G
 
       if (status === "" || status === "pending") { pick = i; break; }
       if (status === "in-progress") {
-        if (lease && lease < now) { pick = i; break; } // crashed/timed out -> reclaim
-        else anyActive = true;                         // working under a live lease
-      } else if (status === "failed") {
-        // Never give up: a failed student is retried once its cooldown passes.
-        if (!lease || lease < now) { pick = i; break; }
-        else anyActive = true;                         // still cooling down -> later
+        if (lease && lease < now) { pick = i; break; } // crashed PC -> reclaim
+        anyActive = true;
+      } else if (status === "failed" && attempts < MAX_ATTEMPTS) {
+        pick = i; break;
       }
     }
 
     if (pick === -1) {
-      // Nothing claimable right now. If anything is still active or merely cooling
-      // down, tell the caller to wait and come back; otherwise the queue is done.
+      // Nothing to hand out. If others still hold live leases, tell the caller to
+      // wait (they may yet fail and need redoing); otherwise the queue is drained.
       return anyActive ? { wait: true } : { done: true };
     }
 
@@ -162,14 +155,9 @@ function _fail(req) {
   var row = _resolveRow(req);
   if (!row) return { ok: false, error: "row not found" };
   var sh = _sheet();
-  var now = Date.now();
   sh.getRange(row, COL.STATUS).setValue("failed");
-  // G = retry-not-before (a short cooldown so the same signup isn't hammered
-  // back-to-back — other students go first, this one is retried later), H =
-  // finished_at, I = last_error. The student is NEVER permanently abandoned.
-  sh.getRange(row, COL.LEASE, 1, 3).setValues([[
-    now + RETRY_COOLDOWN_MINUTES * 60000, now, String(req.error || "").slice(0, 500),
-  ]]);
+  // clear lease so it is reclaimable, record finished_at + the error  (G..I)
+  sh.getRange(row, COL.LEASE, 1, 3).setValues([["", Date.now(), String(req.error || "").slice(0, 500)]]);
   SpreadsheetApp.flush();
   return { ok: true };
 }
@@ -212,38 +200,6 @@ function _json(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
-}
-
-/**
- * Admin helper: force all "failed" students to be retried RIGHT NOW (skip their
- * cooldown) by resetting them to pending with a fresh attempt count. Failed
- * students already retry automatically after their cooldown — use this only to
- * kick them all immediately, e.g. right after switching to a proxy / clean IP.
- * Also un-sticks any "in-progress" row whose lease expired.
- */
-function retryFailed() {
-  var sh = _sheet();
-  var n = sh.getLastRow() - 1;
-  if (n < 1) return;
-  var now = Date.now();
-  var grid = sh.getRange(2, COL.STATUS, n, COL.LEASE - COL.STATUS + 1).getValues(); // C..G
-  var revived = 0;
-  for (var i = 0; i < n; i++) {
-    var status = String(grid[i][0] || "").toLowerCase();
-    var lease = Number(grid[i][COL.LEASE - COL.STATUS]) || 0;
-    var stale = status === "failed" || (status === "in-progress" && lease && lease < now);
-    if (stale) {
-      grid[i][0] = "pending";                       // C status
-      grid[i][COL.OWNER - COL.STATUS] = "";         // D owner
-      grid[i][COL.ATTEMPTS - COL.STATUS] = 0;       // E attempts
-      grid[i][COL.CLAIMED_AT - COL.STATUS] = "";    // F claimed_at
-      grid[i][COL.LEASE - COL.STATUS] = "";         // G lease_expires
-      revived++;
-    }
-  }
-  sh.getRange(2, COL.STATUS, n, COL.LEASE - COL.STATUS + 1).setValues(grid);
-  SpreadsheetApp.flush();
-  Logger.log("Revived failed/stale -> pending: " + revived);
 }
 
 /**
