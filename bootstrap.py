@@ -140,7 +140,20 @@ else:
 run("node -v")
 run("npm -v")
 
-# openpyxl is a Python package; it must NOT be in the npm list.
+# names.xlsx is parsed by the Node runner via `python3 -c "import openpyxl ..."`,
+# so the python3 the runner shells out to must have openpyxl. Colab usually ships
+# it, but install it defensively so the run never dies with "No module named
+# 'openpyxl'". openpyxl is a Python package; it must NOT be in the npm list.
+try:
+    import openpyxl  # noqa: F401
+    print("openpyxl already available.")
+except ImportError:
+    print("Installing openpyxl (needed to read names.xlsx)...")
+    if not (run(f'"{sys.executable}" -m pip install -q openpyxl')
+            or run("python3 -m pip install -q openpyxl")
+            or run("pip3 install -q openpyxl")):
+        sys.exit("Error installing openpyxl (required to read names.xlsx).")
+
 if not run("npm install playwright playwright-extra puppeteer-extra-plugin-stealth"):
     sys.exit("Error installing npm dependencies.")
 
