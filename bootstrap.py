@@ -22,7 +22,14 @@ PC_ID = ""           # optional friendly name for this PC in the dashboard
 START = 1176
 END = 1250
 CONCURRENCY = 1      # how many browsers run in parallel (per PC)
-HEADLESS = True      # True on Colab (no display); False to watch the browser
+# --- Anti-CAPTCHA browser settings -------------------------------------------
+# CHANNEL="chrome" launches REAL Google Chrome (much less CAPTCHA-prone than the
+# bundled Chromium); set "" to use bundled Chromium. HEADLESS=False runs a real
+# visible browser, which is far less likely to be challenged. On Colab there is
+# no screen, so when HEADLESS=False the bootstrap automatically runs under a
+# virtual display (Xvfb) — you don't need to do anything.
+CHANNEL = "chrome"
+HEADLESS = False     # False = headful (least CAPTCHA; auto-uses Xvfb on Colab)
 # ===================================================================
 
 # The repo is now a full Node.js project at its root (runner + node_modules
@@ -206,7 +213,15 @@ if not os.environ.get("COORDINATOR_URL") and not os.path.exists("students.csv"):
              "for distributed mode).")
 
 print("\n=== Setup complete! Starting the runner (MODE=auto) ===")
-if not run("node coursera_manual_runner.js", env=dict(os.environ, MODE="auto")):
+start_cmd = "node coursera_manual_runner.js"
+if os.environ.get("HEADLESS", "").strip().lower() in ("n", "no", "0", "false"):
+    # Headful was requested, but Colab/servers have no screen. Install a virtual
+    # display (Xvfb) and run the real browser inside it — far less CAPTCHA-prone
+    # than headless, with no GUI needed.
+    print("Headful mode on a headless machine: setting up a virtual display (Xvfb)...")
+    run("apt-get update -y && apt-get install -y xvfb")
+    start_cmd = "xvfb-run -a -s '-screen 0 1920x1080x24' node coursera_manual_runner.js"
+if not run(start_cmd, env=dict(os.environ, MODE="auto")):
     sys.exit("The runner exited with an error.")
 '''
 
@@ -279,6 +294,8 @@ def run_project(base):
         env.pop("END", None)
     env["CONCURRENCY"] = str(CONCURRENCY)
     env["HEADLESS"] = "y" if HEADLESS else "n"
+    if CHANNEL:
+        env["CHANNEL"] = CHANNEL
 
     # Distributed mode: hand the coordinator URL (and optional PC id) to the
     # runner, which then ignores START/END and pulls from the shared queue.
