@@ -488,10 +488,17 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   const log = (m) => console.log(`  ${prefix}[auto] ${m}`);
   const observer = createObserver(page, student);
 
+  // Slow / VPN networks: SLOW_FACTOR (>= 1) multiplies EVERY wait below so a step
+  // doesn't fail just because a page or button took longer to arrive. Default 1
+  // (no change). Try SLOW_FACTOR=2 or 3 on a laggy VPN.
+  const TF = Math.max(1, Number(process.env.SLOW_FACTOR) || 1);
+  page.setDefaultNavigationTimeout(45000 * TF);
+  page.setDefaultTimeout(15000 * TF);
+
   const clickRole = async (role, name, { timeout = 15000, optional = false } = {}) => {
     const loc = page.getByRole(role, { name }).filter({ visible: true }).first();
     try {
-      await loc.click({ timeout });
+      await loc.click({ timeout: timeout * TF });
       log(`clicked ${role} "${name}"`);
       return true;
     } catch (e) {
@@ -503,7 +510,7 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   const clickSel = async (selector, { timeout = 15000, optional = false, force = false } = {}) => {
     const loc = page.locator(selector).filter({ visible: true }).first();
     try {
-      await loc.click({ timeout, force });
+      await loc.click({ timeout: timeout * TF, force });
       log(`clicked ${selector}`);
       return true;
     } catch (e) {
@@ -515,7 +522,7 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   const fillSel = async (selector, value, { timeout = 15000, optional = false } = {}) => {
     try {
       const loc = page.locator(selector).first();
-      await loc.fill(value, { timeout });
+      await loc.fill(value, { timeout: timeout * TF });
       await loc.focus().catch(() => {});
       await page.keyboard.press("End").catch(() => {});
       await page.keyboard.press("Space").catch(() => {});
@@ -532,7 +539,7 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   const goto = async (url) => {
     log(`goto ${url}`);
     await page.goto(url, { waitUntil: "domcontentloaded" }).catch(() => {});
-    await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 3000 * TF }).catch(() => {});
     if (OBSERVE_VERBOSE) await observer.capture(`goto-${new URL(url).pathname}`);
   };
 
@@ -570,7 +577,7 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   // waits up to `timeout` for the banner to appear, retries a couple of times,
   // and never throws. No-op (fast) when there's no banner.
   const acceptCookies = async ({ timeout = 8000 } = {}) => {
-    const deadline = Date.now() + timeout;
+    const deadline = Date.now() + timeout * TF;
     do {
       // OneTrust's standard accept button id is the most reliable anchor; fall
       // back to an "Accept"/"Accept all cookies" button by its accessible name.
@@ -582,9 +589,9 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
       for (const [loc, label] of [[byId, "onetrust"], [byText, "accept"]]) {
         if (await loc.count().catch(() => 0)) {
           try {
-            await loc.click({ timeout: 4000 });
+            await loc.click({ timeout: 4000 * TF });
             log(`accepted cookie consent (${label})`);
-            await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
+            await page.waitForLoadState("networkidle", { timeout: 3000 * TF }).catch(() => {});
             return true;
           } catch (e) { /* try the other locator / next poll */ }
         }
@@ -1053,6 +1060,8 @@ async function main() {
   // Let config.json bake in the browser channel (e.g. "chrome" for real Google
   // Chrome) the same way it does HEADLESS/COORDINATOR_URL. Env still wins.
   if (config.CHANNEL && !process.env.CHANNEL) process.env.CHANNEL = config.CHANNEL;
+  // Same for SLOW_FACTOR (scale all waits up for slow/VPN links).
+  if (config.SLOW_FACTOR && !process.env.SLOW_FACTOR) process.env.SLOW_FACTOR = String(config.SLOW_FACTOR);
 
   // --- Distributed (queue) mode ---
   // If a coordinator URL is configured, this PC pulls students from the shared
