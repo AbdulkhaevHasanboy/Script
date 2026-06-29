@@ -28,7 +28,17 @@
 // ----------------------------- CONFIG -----------------------------
 var QUEUE_SHEET = "Queue";   // tab name holding the student rows
 var LEASE_MINUTES = 25;      // a claim is valid this long without a heartbeat
-var MAX_ATTEMPTS = 4;        // give up on a student after this many failed tries
+var MAX_ATTEMPTS = 4;        // tries per round; after this many fails the student
+                             // cools down (below) then gets a FRESH round of tries
+// Students 1..PROCESS_FROM_STUDENT are owned by the OLD scripts (a different,
+// unconnected form). This queue must NEVER hand them out — claim skips them
+// entirely (pending AND failed). Only students after this position are processed.
+var PROCESS_FROM_STUDENT = 1000;
+// A student that has used up all MAX_ATTEMPTS and still has no certificate is not
+// abandoned: after this many minutes it becomes claimable again with a fresh round
+// of MAX_ATTEMPTS. Repeats until the student finally completes. ("retake them after
+// half an hour" — leave a PC running and it auto-retries failed ones every 30 min.)
+var RETRY_FAILED_AFTER_MIN = 30;
 var TOKEN = "";              // optional shared secret; "" = no auth. If set, the
                              // runner must send the same COORDINATOR_TOKEN.
 // Column indexes (1-based) — keep in sync with the layout above.
@@ -89,33 +99,55 @@ function _claim(req) {
     if (n < 1) return { done: true };
 
     var now = Date.now();
-    // Read only the decision columns (status..lease) for a fast scan.
-    var meta = sh.getRange(2, COL.STATUS, n, COL.LEASE - COL.STATUS + 1).getValues();
+    // Read the decision columns (status..finished_at) for a fast scan. finished_at
+    // (H) is needed for the failed-retry cooldown below.
+    var meta = sh.getRange(2, COL.STATUS, n, COL.FINISHED_AT - COL.STATUS + 1).getValues();
     var pick = -1;
+    var resetAttempts = false; // true when reclaiming a fully-failed student for a fresh round
     var anyActive = false;
     for (var i = 0; i < n; i++) {
-      var status = String(meta[i][0] || "").toLowerCase();       // C
+      // Students 1..PROCESS_FROM_STUDENT belong to the old scripts/form — never hand
+      // them out here (neither pending nor failed). Student position is 1-based: the
+      // first data row (i = 0) is student #1.
+      if ((i + 1) <= PROCESS_FROM_STUDENT) continue;
+
+      var status = String(meta[i][0] || "").toLowerCase();           // C
       var attempts = Number(meta[i][COL.ATTEMPTS - COL.STATUS]) || 0; // E
       var lease = Number(meta[i][COL.LEASE - COL.STATUS]) || 0;       // G
+      var finishedAt = Number(meta[i][COL.FINISHED_AT - COL.STATUS]) || 0; // H
 
       if (status === "" || status === "pending") { pick = i; break; }
       if (status === "in-progress") {
         if (lease && lease < now) { pick = i; break; } // crashed PC -> reclaim
         anyActive = true;
-      } else if (status === "failed" && attempts < MAX_ATTEMPTS) {
-        pick = i; break;
+      } else if (status === "failed") {
+        if (attempts < MAX_ATTEMPTS) {
+          // still inside the current round of attempts — retry right away.
+          pick = i; break;
+        } else if (finishedAt && (now - finishedAt) >= RETRY_FAILED_AFTER_MIN * 60000) {
+          // Used up all MAX_ATTEMPTS but still no certificate, and the cooldown has
+          // passed: give it a brand-new round of attempts (reset the counter below).
+          pick = i; resetAttempts = true; break;
+        } else if (finishedAt) {
+          // Failed, attempts exhausted, but still cooling down. It WILL be claimable
+          // again after the cooldown, so keep workers polling rather than draining.
+          anyActive = true;
+        }
       }
     }
 
     if (pick === -1) {
-      // Nothing to hand out. If others still hold live leases, tell the caller to
-      // wait (they may yet fail and need redoing); otherwise the queue is drained.
+      // Nothing to hand out. If others still hold live leases OR failed students are
+      // cooling down, tell the caller to wait (they'll be claimable soon); otherwise
+      // the queue is drained.
       return anyActive ? { wait: true } : { done: true };
     }
 
     var row = pick + 2;
     var idName = sh.getRange(row, COL.ID, 1, 2).getValues()[0];
-    var attempts = (Number(meta[pick][COL.ATTEMPTS - COL.STATUS]) || 0) + 1;
+    // Fresh round after the cooldown starts the attempt count over; otherwise continue
+    // counting within the current round.
+    var attempts = (resetAttempts ? 0 : (Number(meta[pick][COL.ATTEMPTS - COL.STATUS]) || 0)) + 1;
     // status, owner, attempts, claimed_at, lease_expires  (C..G)
     sh.getRange(row, COL.STATUS, 1, 5).setValues([[
       "in-progress", pc, attempts, now, now + LEASE_MINUTES * 60000,
