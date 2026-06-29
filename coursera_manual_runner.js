@@ -677,13 +677,20 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   await clickRole("button", /i accept/i, { optional: true, timeout: 8000 });
   await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
   await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
-  await page.waitForURL(/\/(learn|home)\//, { timeout: 20000 }).catch(() => {});
+  // Do NOT navigate by URL here. After the Enroll/Continue clicks above, Coursera
+  // redirects into the course on its own — wait for it to land on the course home
+  // welcome page (.../learn/<slug>/home/welcome) without us touching the address bar.
+  await page.waitForURL(/\/learn\/[^/]+\/home\/welcome/, { timeout: 30000 }).catch(() => {});
   await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
   log(`after enrollment, URL: ${page.url()}`);
 
   // On the course home: tick "I commit to completing this guided project", then click
   // "Start the guided project" — this unlocks all the items (supplement, lab, quiz).
-  await goto(`${LEARN_BASE}/home/welcome`);
+  // The auto-redirect above should already have us on /home/welcome. Only fall back to
+  // an explicit navigation if it never made it there (redirect stalled / got blocked).
+  if (!/\/home\/welcome/.test(page.url())) {
+    await goto(`${LEARN_BASE}/home/welcome`);
+  }
   await clickSel('input[type="checkbox"]', { optional: true, force: true, timeout: 8000 });
   await clickRole("button", /start the guided project/i, { optional: true, timeout: 12000 });
   await clickRole("button", /go to first item/i, { optional: true, timeout: 6000 });
@@ -801,6 +808,10 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
 
   // 7) Honor code + submit
   await fillSel('input[data-testid="honor-code-legal-name-input"]', FULL, { optional: true });
+  // Don't fire the submit instantly — the answers + legal name need a moment to
+  // register, otherwise the click happens so fast the submission doesn't go through.
+  // Pause ~4s (scaled in slow mode) so the page has settled before we submit.
+  await page.waitForTimeout(4000 * TF);
   await clickSel('button[data-testid="submit-button"]', { timeout: 10000 });
   await clickSel('button[data-testid="dialog-submit-button"]', { timeout: 12000 });
   await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
