@@ -495,6 +495,21 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   page.setDefaultNavigationTimeout(45000 * TF);
   page.setDefaultTimeout(15000 * TF);
 
+  // The cookie-consent ("We Care About Your Privacy" / OneTrust) dialog can pop
+  // up at ANY moment and overlay the page. Register an auto-handler so Playwright
+  // clicks Accept the instant it appears and blocks an action — no matter when —
+  // then retries the action. Runs unlimited times; never throws.
+  const cookieAccept = page
+    .locator("#onetrust-accept-btn-handler")
+    .or(page.getByRole("button", { name: /^accept( all( cookies)?)?$/i }))
+    .first();
+  await page
+    .addLocatorHandler(cookieAccept, async () => {
+      await cookieAccept.click({ timeout: 5000 * TF }).catch(() => {});
+      log("auto-accepted cookie consent");
+    }, { noWaitAfter: true })
+    .catch(() => {});
+
   const clickRole = async (role, name, { timeout = 15000, optional = false } = {}) => {
     const loc = page.getByRole(role, { name }).filter({ visible: true }).first();
     try {
