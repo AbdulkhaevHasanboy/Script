@@ -636,6 +636,7 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   await fillSel('input[name="name"]', FULL);
   await fillSel('input[name="password"]', student.password);
   await clickRole("button", /join for free/i);
+  await clickRole("button", /join for free/i, { optional: true, timeout: 1000 });
   await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
   log(`after sign-up, URL: ${page.url()}`);
   await observer.capture("after-signup");
@@ -675,7 +676,7 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   await acceptCookies({ timeout: 6000 });
   await clickRole("button", /^(continue|go to course|start learning)$/i, { optional: true, timeout: 25000 });
   await clickRole("button", /i accept/i, { optional: true, timeout: 8000 });
-  await clickRole("button", /enroll for free/i, { optional: false, timeout: 8000 });
+  await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
   await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
   // Do NOT navigate by URL here. After the Enroll/Continue clicks above, Coursera
   // redirects into the course on its own — wait for it to land on the course home
