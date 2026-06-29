@@ -219,15 +219,10 @@ if not os.environ.get("COORDINATOR_URL") and not os.path.exists("students.csv"):
              "for distributed mode).")
 
 print("\n=== Setup complete! Starting the runner (MODE=auto) ===")
-start_cmd = "node coursera_manual_runner.js"
-if os.environ.get("HEADLESS", "").strip().lower() in ("n", "no", "0", "false"):
-    # Headful was requested, but Colab/servers have no screen. Install a virtual
-    # display (Xvfb) and run the real browser inside it — far less CAPTCHA-prone
-    # than headless, with no GUI needed.
-    print("Headful mode on a headless machine: setting up a virtual display (Xvfb)...")
-    run("apt-get update -y && apt-get install -y xvfb")
-    start_cmd = "xvfb-run -a -s '-screen 0 1920x1080x24' node coursera_manual_runner.js"
-if not run(start_cmd, env=dict(os.environ, MODE="auto")):
+# The virtual display (Xvfb) for headful mode is set up by bootstrap.py itself
+# (the only place it lives now), and this script is launched under it — so the
+# browser just inherits DISPLAY here. We only launch the runner.
+if not run("node coursera_manual_runner.js", env=dict(os.environ, MODE="auto")):
     sys.exit("The runner exited with an error.")
 '''
 
@@ -323,6 +318,15 @@ def run_project(base):
           f"CHANNEL={CHANNEL or 'chromium'}) ===", flush=True)
 
     cmd = [sys.executable, "run_on_colab.py"]
+    if not HEADLESS:
+        # Headful on a screenless Colab/VM needs a virtual display. Set it up
+        # HERE — this is the ONLY place the fake display is handled now — and
+        # launch the whole child under it, so the runner and every browser it
+        # spawns inherit DISPLAY. Headful is far less CAPTCHA-prone than headless
+        # and needs no GUI. (run_on_colab.py no longer touches Xvfb.)
+        print("Headful mode: setting up a virtual display (Xvfb) for the runner...")
+        subprocess.run("apt-get update -y && apt-get install -y xvfb", shell=True)
+        cmd = ["xvfb-run", "-a", "-s", "-screen 0 1920x1080x24"] + cmd
 
     # Stream the child's output straight through — no screenshot viewer.
     proc = subprocess.Popen(
