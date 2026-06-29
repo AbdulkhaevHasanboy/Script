@@ -650,6 +650,33 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
     return false;
   };
 
+  // After signup the "Enroll for free" click sometimes fires (URL gains
+  // ?action=enroll) but the page never transitions into the course — the account
+  // stays UNENROLLED on the /projects/ marketing landing page. When that happens
+  // every /learn/<slug>/... URL silently redirects back to /projects/, so the
+  // supplement/lab/quiz never load and the quiz "options" are all "not found".
+  // This verifies enrollment by navigating to the course home and checking we
+  // actually land on a /learn/ URL (not bounced to /projects/); if we got bounced
+  // it re-clicks Enroll (incl. the modal-confirm variant) and waits for the
+  // redirect, retrying a few times. Returns true once enrolled.
+  const ensureEnrolled = async () => {
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      await goto(`${LEARN_BASE}/home/welcome`);
+      if (/\/learn\//.test(page.url())) {
+        log(`enrollment confirmed (attempt ${attempt}): ${page.url()}`);
+        return true;
+      }
+      log(`not enrolled yet (attempt ${attempt}): bounced to ${page.url()} — clicking Enroll`);
+      await acceptCookies({ timeout: 4000 });
+      await clickRole("button", /enroll for free/i, { optional: true, timeout: 10000 });
+      // A confirmation dialog ("Enroll for free"/"Continue") sometimes follows the
+      // first click; click it too, then wait for the redirect into the course.
+      await clickRole("button", /^(enroll for free|continue|start)$/i, { optional: true, timeout: 6000 });
+      await page.waitForURL(/\/learn\//, { timeout: 20000 }).catch(() => {});
+    }
+    return /\/learn\//.test(page.url());
+  };
+
   // 1) Landing page -> Enroll for free
   await goto(COURSE_URL);
   await observer.capture("landing");
@@ -712,20 +739,17 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   await clickRole("button", /i accept/i, { optional: true, timeout: 8000 });
   await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
   await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
-  // Do NOT navigate by URL here. After the Enroll/Continue clicks above, Coursera
-  // redirects into the course on its own — wait for it to land on the course home
-  // welcome page (.../learn/<slug>/home/welcome) without us touching the address bar.
+  // After the Enroll/Continue clicks above, Coursera should redirect into the
+  // course. Verify it actually took: ensureEnrolled navigates to the course home
+  // and confirms we land on a /learn/ URL instead of bouncing back to the
+  // /projects/ marketing page. If enrollment never completes there is no point
+  // walking through a quiz that can't load — fail fast so the queue retries.
   await page.waitForURL(/\/learn\/[^/]+\/home\/welcome/, { timeout: 30000 }).catch(() => {});
   await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
   log(`after enrollment, URL: ${page.url()}`);
-
-  // On the course home: tick "I commit to completing this guided project", then click
-  // "Start the guided project" — this unlocks all the items (supplement, lab, quiz).
-  // The auto-redirect above should already have us on /home/welcome. Only fall back to
-  // an explicit navigation if it never made it there (redirect stalled / got blocked).
-  if (!/\/home\/welcome/.test(page.url())) {
-    await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
-    await goto(`${LEARN_BASE}/home/welcome`);
+  if (!(await ensureEnrolled())) {
+    await observer.capture("enrollment-failed");
+    throw new Error("Enrollment did not complete: account stayed on the /projects/ landing page (every /learn/ URL bounced back).");
   }
   await clickSel('input[type="checkbox"]', { optional: true, force: true, timeout: 8000 });
   await clickRole("button", /start the guided project/i, { optional: true, timeout: 12000 });
