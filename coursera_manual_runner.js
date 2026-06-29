@@ -650,6 +650,36 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
     return false;
   };
 
+  // The "Enroll for free" button on the /projects/ landing page is a
+  // PROGRESSIVELY-ENHANCED control. The saved DOM shows it server-rendered as a
+  // plain GET form:
+  //   <form action="/projects/<slug>" method="GET">
+  //     <input type="hidden" name="action" value="enroll">
+  //     <button type="submit" data-e2e="enroll-button">Enroll for free</button>
+  //   </form>
+  // Coursera's React attaches the REAL enroll handler (an XHR that enrolls, then
+  // redirects into /learn/) onClick only AFTER hydration. If we click before
+  // hydration finishes, the native form submit wins and merely reloads
+  // /projects/?action=enroll WITHOUT enrolling — which is exactly the bounce the
+  // logs showed (`after enrollment, URL: .../projects/...?action=enroll`). So we
+  // (a) wait for the page to settle so the handler is wired up, and (b) prefer the
+  // stable [data-e2e="enroll-button"] selector over fragile "Enroll for free" text.
+  const clickEnroll = async ({ timeout = 20000, optional = false } = {}) => {
+    // Let React finish wiring the click handler so the real enroll XHR fires
+    // instead of the dumb GET-form fallback that doesn't actually enroll.
+    await page.waitForLoadState("networkidle", { timeout: 8000 * TF }).catch(() => {});
+    await page.waitForTimeout(1200 * TF);
+    const byE2e = page.locator('[data-e2e="enroll-button"]').filter({ visible: true }).first();
+    if (await byE2e.count().catch(() => 0)) {
+      try {
+        await byE2e.click({ timeout: timeout * TF });
+        log('clicked [data-e2e="enroll-button"]');
+        return true;
+      } catch (e) { /* fall through to the text-based locator below */ }
+    }
+    return clickRole("button", /enroll for free/i, { optional, timeout });
+  };
+
   // After signup the "Enroll for free" click sometimes fires (URL gains
   // ?action=enroll) but the page never transitions into the course — the account
   // stays UNENROLLED on the /projects/ marketing landing page. When that happens
@@ -659,22 +689,38 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   // actually land on a /learn/ URL (not bounced to /projects/); if we got bounced
   // it re-clicks Enroll (incl. the modal-confirm variant) and waits for the
   // redirect, retrying a few times. Returns true once enrolled.
+  // The real enroll button on the consumer project page carries a stable
+  // attribute hook: <button ... data-e2e="enroll-button">Enroll for free</button>.
+  // We target that directly instead of the text regex /enroll for free/i, which
+  // also matches the recommended-course cards in the sidebar (the only /learn/
+  // links present on the bounced page point to *other* courses, not this one).
+  // The presence of [data-e2e="enroll-button"] is itself the "still unenrolled"
+  // signal — more reliable than guessing from the URL alone.
+  const ENROLL_BTN = 'button[data-e2e="enroll-button"]';
   const ensureEnrolled = async () => {
     for (let attempt = 1; attempt <= 4; attempt++) {
       await goto(`${LEARN_BASE}/home/welcome`);
-      if (/\/learn\//.test(page.url())) {
+      // Enrolled iff we land on a /learn/ URL AND the project page's enroll
+      // button is gone (it lingers in the DOM on the bounced marketing page).
+      const onLearn = /\/learn\//.test(page.url());
+      const enrollVisible = await page.locator(ENROLL_BTN).filter({ visible: true }).count().catch(() => 0);
+      if (onLearn && !enrollVisible) {
         log(`enrollment confirmed (attempt ${attempt}): ${page.url()}`);
         return true;
       }
-      log(`not enrolled yet (attempt ${attempt}): bounced to ${page.url()} — clicking Enroll`);
+      log(`not enrolled yet (attempt ${attempt}): url=${page.url()} enrollBtn=${enrollVisible} — clicking Enroll`);
       await acceptCookies({ timeout: 4000 });
-      await clickRole("button", /enroll for free/i, { optional: true, timeout: 10000 });
+      // clickEnroll waits for hydration first so the real enroll XHR fires
+      // instead of the GET-form fallback that just re-bounces to /projects/.
+      await clickEnroll({ optional: true, timeout: 10000 });
       // A confirmation dialog ("Enroll for free"/"Continue") sometimes follows the
       // first click; click it too, then wait for the redirect into the course.
       await clickRole("button", /^(enroll for free|continue|start)$/i, { optional: true, timeout: 6000 });
       await page.waitForURL(/\/learn\//, { timeout: 20000 }).catch(() => {});
     }
-    return /\/learn\//.test(page.url());
+    // Final verdict: on /learn/ and no enroll button left to click.
+    const stillEnroll = await page.locator(ENROLL_BTN).filter({ visible: true }).count().catch(() => 0);
+    return /\/learn\//.test(page.url()) && !stillEnroll;
   };
 
   // 1) Landing page -> Enroll for free
@@ -737,8 +783,10 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   await acceptCookies({ timeout: 6000 });
   await clickRole("button", /^(continue|go to course|start learning)$/i, { optional: true, timeout: 25000 });
   await clickRole("button", /i accept/i, { optional: true, timeout: 8000 });
-  await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
-  await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
+  // Use the hydration-aware enroll click so the real XHR fires rather than the
+  // native GET-form fallback (which only reloads /projects/?action=enroll).
+  await clickEnroll({ optional: true, timeout: 8000 });
+  await clickEnroll({ optional: true, timeout: 8000 });
   // After the Enroll/Continue clicks above, Coursera should redirect into the
   // course. Verify it actually took: ensureEnrolled navigates to the course home
   // and confirms we land on a /learn/ URL instead of bouncing back to the
