@@ -558,6 +558,40 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
     if (OBSERVE_VERBOSE) await observer.capture(`goto-${new URL(url).pathname}`);
   };
 
+  // Coursera intermittently drops the freshly-created session by the time we reach
+  // the graded assignment, replacing the quiz with a "Log in or create account"
+  // wall (visible input[name="email"]). When that happens there is no quiz and no
+  // submit button, so every option + the submit click "time out". Detect the wall
+  // and sign back in with the SAME credentials we just registered, then return to
+  // `returnUrl` so the quiz loads authenticated. No-op when already logged in.
+  // Returns true if it had to re-login. Retries the login a couple of times.
+  const ensureLoggedIn = async (returnUrl) => {
+    const isWalled = async () =>
+      (await page.locator('input[name="email"]').filter({ visible: true }).first().count().catch(() => 0)) > 0;
+    if (!(await isWalled())) return false;
+    log("login wall detected on a post-signup page — signing back in");
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const emailBox = page.locator('input[name="email"]').filter({ visible: true }).first();
+      await emailBox.fill(student.email, { timeout: 10000 * TF }).catch(() => {});
+      await clickRole("button", /^continue$/i, { optional: true, timeout: 12000 });
+      await page.waitForTimeout(1500 * TF);
+      const pwBox = page.locator('input[name="password"]').filter({ visible: true }).first();
+      await pwBox.fill(student.password, { timeout: 10000 * TF }).catch(() => {});
+      // Existing-account submit is "Login"; tolerate "Log in"/"Continue"/"Submit".
+      await clickRole("button", /^(log ?in|continue|submit)$/i, { optional: true, timeout: 12000 });
+      await page.waitForLoadState("networkidle", { timeout: 6000 * TF }).catch(() => {});
+      if (returnUrl) await goto(returnUrl);
+      if (!(await isWalled())) {
+        log(`re-login succeeded (attempt ${attempt})`);
+        return true;
+      }
+      log(`re-login attempt ${attempt} did not clear the wall; retrying`);
+    }
+    log("WARNING: still on the login wall after re-login attempts");
+    await observer.capture("relogin-failed");
+    return true;
+  };
+
   // Coursera SOMETIMES interrupts the post-signup/enroll flow with a "We've
   // updated our Terms of Use" consent dialog (the URL gains showTouAccept=1).
   // It often does NOT appear at all. This is self-gating: it does a quick,
@@ -690,6 +724,7 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   // The auto-redirect above should already have us on /home/welcome. Only fall back to
   // an explicit navigation if it never made it there (redirect stalled / got blocked).
   if (!/\/home\/welcome/.test(page.url())) {
+    await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
     await goto(`${LEARN_BASE}/home/welcome`);
   }
   await clickSel('input[type="checkbox"]', { optional: true, force: true, timeout: 8000 });
@@ -752,6 +787,9 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   // 5) Open the graded assignment and start it
   await goto(`${LEARN_BASE}${ASSIGNMENT_PATH}`);
   log(`assignment page URL: ${page.url()}`);
+  // If the session was dropped, the assignment URL shows a login wall instead of
+  // the quiz — re-authenticate and reload before trying to answer/submit.
+  await ensureLoggedIn(`${LEARN_BASE}${ASSIGNMENT_PATH}`);
   await clickSel('button[data-testid="continue-button"]', { optional: true, timeout: 8000 });
   await clickSel('button[data-testid="CoverPageActionButton"]', { optional: true, timeout: 10000 });
   await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
@@ -813,6 +851,10 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   // register, otherwise the click happens so fast the submission doesn't go through.
   // Pause ~4s (scaled in slow mode) so the page has settled before we submit.
   await page.waitForTimeout(4000 * TF);
+  // The submit button often sits below the fold and behind lazy-rendered content;
+  // scroll it into view first so the click isn't intercepted, then click.
+  const submitBtn = page.locator('button[data-testid="submit-button"]').filter({ visible: true }).first();
+  await submitBtn.scrollIntoViewIfNeeded({ timeout: 5000 * TF }).catch(() => {});
   await clickSel('button[data-testid="submit-button"]', { timeout: 10000 });
   await clickSel('button[data-testid="dialog-submit-button"]', { timeout: 12000 });
   await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
