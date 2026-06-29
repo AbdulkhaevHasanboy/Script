@@ -674,6 +674,7 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   //    sits on top of the Continue button — accept it first so the click lands.
   await acceptCookies({ timeout: 6000 });
   await clickRole("button", /^(continue|go to course|start learning)$/i, { optional: true, timeout: 25000 });
+  await clickRole("button", /i accept/i, { optional: true, timeout: 8000 });
   await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
   await page.waitForURL(/\/(learn|home)\//, { timeout: 20000 }).catch(() => {});
   await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
