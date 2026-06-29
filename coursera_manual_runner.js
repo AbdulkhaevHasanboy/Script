@@ -673,13 +673,39 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   //    The cookie-consent dialog frequently appears on THIS success screen and
   //    sits on top of the Continue button — accept it first so the click lands.
   await acceptCookies({ timeout: 6000 });
-  await clickRole("button", /^(continue|go to course|start learning)$/i, { optional: true, timeout: 25000 });
-  await clickRole("button", /i accept/i, { optional: true, timeout: 8000 });
-  await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
-  await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
-  await page.waitForURL(/\/(learn|home)\//, { timeout: 20000 }).catch(() => {});
+
+  // Accept the Terms-of-Use dialog FIRST. After signup the URL carries
+  // showTouAccept=1 and this modal ("Accept our Terms of Use ... to continue",
+  // button "I accept") is what's actually on screen, sitting on top of the
+  // pending action=enroll. Accepting it lets Coursera resume the enrollment and
+  // redirect to /learn/.../home/welcome on its own.
+  await acceptTermsDialog();
+
+  // Now WAIT for that redirect instead of blindly clicking. This is the part the
+  // old code got wrong: it fired two "Enroll for free" clicks immediately after
+  // "I accept", which landed on the project page that's still briefly rendered,
+  // re-pushed ?action=enroll, and interrupted the in-flight redirect — leaving
+  // the account stranded on the public project page, never enrolled. So: click
+  // AT MOST once per pass, then wait for the URL to actually change to a course
+  // page, and only loop again if we're still not there.
+  const enrolled = () => /\/(learn|home)\//.test(page.url());
+  const enrollDeadline = Date.now() + 70000 * TF;
+  while (!enrolled() && Date.now() < enrollDeadline) {
+    await acceptCookies({ timeout: 2000 });
+    await acceptTermsDialog();
+    // A single click on whichever finish-enrollment control is present. If the
+    // TOU accept above already kicked off the redirect, this button is gone and
+    // the click is a harmless skip.
+    await clickRole(
+      "button",
+      /^(enroll for free|continue|go to course|start learning)$/i,
+      { optional: true, timeout: 6000 }
+    );
+    await page.waitForURL(/\/(learn|home)\//, { timeout: 12000 * TF }).catch(() => {});
+  }
   await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
-  log(`after enrollment, URL: ${page.url()}`);
+  log(`after enrollment, URL: ${page.url()}`
+    + (enrolled() ? "" : "  (WARNING: still not on a course page — enrollment likely failed)"));
 
   // On the course home: tick "I commit to completing this guided project", then click
   // "Start the guided project" — this unlocks all the items (supplement, lab, quiz).
