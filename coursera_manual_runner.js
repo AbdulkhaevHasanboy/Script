@@ -3,7 +3,7 @@ const os = require("node:os");
 const path = require("node:path");
 const readline = require("node:readline/promises");
 const { stdin: input, stdout: output } = require("node:process");
-const { execSync } = require("node:child_process");
+const { execFileSync, execSync } = require("node:child_process");
 const { chromium } = require("playwright-extra");
 const stealth = require("puppeteer-extra-plugin-stealth")();
 
@@ -1133,10 +1133,82 @@ async function coordinatorRequest(url, action, payload = {}, { retries = 6 } = {
 // Turn a claimed {student_id, full_name} into a runnable student with a brand-new
 // unique email + password (each retry is a fresh signup, so a half-made account
 // from a crashed PC never blocks anyone).
-function buildStudentFromClaim(claim) {
-  const parts = String(claim.full_name || "").trim().split(/\s+/).filter(Boolean);
-  const first = parts[0] || "Student";
-  const last = parts.slice(1).join(" ") || String(claim.student_id || "User");
+function cleanClaimName(value) {
+  const name = String(value || "").replace(/\s+/g, " ").trim();
+  if (!name) return "";
+  if (/^student\s+user$/i.test(name)) return "";
+  return name;
+}
+
+async function fileExists(file) {
+  try {
+    await fs.access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function findFullNameByStudentId(studentId) {
+  const id = String(studentId || "").trim();
+  if (!id) return "";
+
+  for (const csvFile of ["queue_seed.csv", CSV_FILE]) {
+    if (!(await fileExists(csvFile))) continue;
+    try {
+      const { students } = await loadStudents(csvFile);
+      const match = students.find((student) => String(student.student_id || "").trim() === id);
+      if (!match) continue;
+      const fullName = cleanClaimName(match.full_name);
+      if (fullName) return fullName;
+      const fromParts = cleanClaimName(`${match.first_name || ""} ${match.last_name || ""}`);
+      if (fromParts) return fromParts;
+    } catch {
+      // Try the next roster source.
+    }
+  }
+
+  if (await fileExists("names.xlsx")) {
+    try {
+      const script = [
+        "import json, openpyxl, sys",
+        "student_id = sys.argv[1]",
+        "wb = openpyxl.load_workbook('names.xlsx', data_only=True)",
+        "sheet = wb['Talabalar']",
+        "name = ''",
+        "for r in range(3, sheet.max_row + 1):",
+        "    sid = sheet.cell(r, 1).value",
+        "    if sid and str(sid).strip() == student_id:",
+        "        name = str(sheet.cell(r, 2).value or '').strip()",
+        "        break",
+        "print(json.dumps(name))",
+      ].join("\n");
+      const out = execFileSync("python3", ["-c", script, id], { encoding: "utf8", maxBuffer: 5 * 1024 * 1024 });
+      return cleanClaimName(JSON.parse(out));
+    } catch {
+      return "";
+    }
+  }
+
+  return "";
+}
+
+async function buildStudentFromClaim(claim) {
+  let fullName = cleanClaimName(claim.full_name || claim.name);
+  if (!fullName) {
+    const firstLast = cleanClaimName(`${claim.first_name || ""} ${claim.last_name || ""}`);
+    fullName = firstLast || await findFullNameByStudentId(claim.student_id);
+  }
+  if (!fullName) {
+    throw new Error(
+      `Coordinator claim for student_id=${claim.student_id || "(missing)"} has no full_name, ` +
+      "and no local roster fallback found. Fix/import the Queue full_name column before running.",
+    );
+  }
+
+  const parts = fullName.split(/\s+/).filter(Boolean);
+  const first = parts[0];
+  const last = parts.slice(1).join(" ");
   const student = { student_id: claim.student_id, first_name: first, last_name: last, email: "", password: "" };
   student.email = makeFreshEmail(student);
   student.password = makePassword(student);
@@ -1225,9 +1297,23 @@ async function runCoordinatorMode(config) {
         continue;
       }
 
-      const student = buildStudentFromClaim(claim);
+      let student;
+      try {
+        student = await buildStudentFromClaim(claim);
+      } catch (e) {
+        console.error(`[queue:w${wid}] bad claim row ${claim.row || "?"}: ${e.message}`);
+        await coordinatorRequest(coordinatorUrl, "fail", {
+          pc: pcId, row: claim.row, student_id: claim.student_id,
+          error: e.message.slice(0, 300),
+        }).catch((err) => console.warn(`[queue:w${wid}] report bad-claim failed: ${err.message}`));
+        failedHere++;
+        continue;
+      }
       const fullName = `${student.first_name} ${student.last_name}`.trim();
       const logPrefix = `[${student.student_id}]`;
+      if (!cleanClaimName(claim.full_name || claim.name)) {
+        console.warn(`${logPrefix} [queue:w${wid}] coordinator claim had no full_name; using local roster name: ${fullName}`);
+      }
       console.log(`\n${logPrefix} [queue:w${wid}] claimed (attempt ${claim.attempt}): ${fullName} / ${student.email}`);
 
       // Keep the lease alive while this (possibly multi-minute) student runs.
