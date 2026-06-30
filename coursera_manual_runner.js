@@ -856,6 +856,8 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   await acceptCookies({ timeout: 6000 });
   await clickRole("button", /^(continue|go to course|start learning)$/i, { optional: true, timeout: 25000 });
   await clickRole("button", /i accept/i, { optional: true, timeout: 8000 });
+  await clickRole("button", /^(continue|go to course|start learning)$/i, { optional: true, timeout: 25000 });
+
   // Use the hydration-aware enroll click so the real XHR fires rather than the
   // native GET-form fallback (which only reloads /projects/?action=enroll).
   await clickEnroll({ optional: true, timeout: 8000 });
