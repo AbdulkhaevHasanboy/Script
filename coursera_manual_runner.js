@@ -12,8 +12,37 @@ chromium.use(stealth);
 
 const CSV_FILE = "students.csv";
 const USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36";
 const COURSE_URL = "https://www.coursera.org/projects/build-a-computer-vision-app-with-azure-cognitive-services";
+
+const COURSERA_BROWSER_HEADERS = {
+  "accept-language": "en-US,en;q=0.9,uz;q=0.8",
+  "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"Linux"',
+};
+
+const COURSERA_SENTRY_ENVELOPE_URL =
+  "https://o75955.ingest.sentry.io/api/4505745374576640/envelope/**";
+
+async function applyCourseraNetworkProfile(context) {
+  await context.route(COURSERA_SENTRY_ENVELOPE_URL, async (route, request) => {
+    const headers = {
+      ...request.headers(),
+      ...COURSERA_BROWSER_HEADERS,
+      accept: "*/*",
+      "content-type": "text/plain;charset=UTF-8",
+      origin: "https://www.coursera.org",
+      referer: "https://www.coursera.org/",
+      "sec-fetch-dest": "empty",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-site": "cross-site",
+      "user-agent": USER_AGENT,
+      priority: "u=1, i",
+    };
+    await route.continue({ headers });
+  });
+}
 
 const STEALTH_SCRIPT = `
   // 1. Hide Webdriver
@@ -400,7 +429,9 @@ async function submitToGoogleForm(browser, fullName, email, password, certUrl, l
     viewport: { width: 1280, height: 800 },
     userAgent: USER_AGENT,
     locale: "uz-UZ",
+    extraHTTPHeaders: COURSERA_BROWSER_HEADERS,
   });
+  await applyCourseraNetworkProfile(context);
   await context.addInitScript(STEALTH_SCRIPT);
   const page = await context.newPage();
   try {
@@ -1075,7 +1106,9 @@ async function runFlowWithFallbacks(browser, student, headless, logPrefix) {
     viewport: { width: 1920, height: 1080 },
     userAgent: USER_AGENT,
     locale: "en-US",
+    extraHTTPHeaders: COURSERA_BROWSER_HEADERS,
   });
+  await applyCourseraNetworkProfile(context);
   await context.addInitScript(STEALTH_SCRIPT);
   const page = await context.newPage();
   try {
@@ -1416,7 +1449,9 @@ async function main() {
           viewport: { width: 1920, height: 1080 },
           userAgent: USER_AGENT,
           locale: "en-US",
+          extraHTTPHeaders: COURSERA_BROWSER_HEADERS,
         });
+        await applyCourseraNetworkProfile(context);
         await context.addInitScript(STEALTH_SCRIPT);
 
         const page = await context.newPage();
@@ -1499,7 +1534,9 @@ async function main() {
         viewport: { width: 1920, height: 1080 },
         userAgent: USER_AGENT,
         locale: "en-US",
+        extraHTTPHeaders: COURSERA_BROWSER_HEADERS,
       });
+      await applyCourseraNetworkProfile(context);
       await context.addInitScript(STEALTH_SCRIPT);
 
       const recordedSteps = [];
