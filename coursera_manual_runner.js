@@ -728,6 +728,36 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   // The presence of [data-e2e="enroll-button"] is itself the "still unenrolled"
   // signal — more reliable than guessing from the URL alone.
   const ENROLL_BTN = 'button[data-e2e="enroll-button"]';
+  const isProjectLanding = () => {
+    const url = page.url();
+    return /coursera\.org\/projects\//i.test(url);
+  };
+
+  const recoverFromLandingAndRetry = async (targetUrl, label = "course page") => {
+    const targetPath = new URL(targetUrl).pathname;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await goto(targetUrl);
+      const currentPath = new URL(page.url()).pathname;
+      const onTargetCourse = page.url().startsWith(LEARN_BASE) && currentPath === targetPath;
+      const enrollVisible = await page.locator(ENROLL_BTN).filter({ visible: true }).count().catch(() => 0);
+      if (onTargetCourse && !enrollVisible) {
+        if (attempt > 1) log(`${label} reached after landing recovery: ${page.url()}`);
+        return true;
+      }
+
+      log(`${label} bounced/stayed on landing (attempt ${attempt}): ${page.url()} — reopening landing and enrolling`);
+      await goto(COURSE_URL);
+      await acceptCookies({ timeout: 4000 });
+      await clickEnroll({ optional: true, timeout: 12000 });
+      await clickRole("button", /^(enroll for free|continue|start|go to course|start learning)$/i, { optional: true, timeout: 8000 });
+      await page.waitForURL(/\/learn\//, { timeout: 20000 * TF }).catch(() => {});
+      await page.waitForLoadState("networkidle", { timeout: 3000 * TF }).catch(() => {});
+    }
+
+    await observer.capture(`landing-recovery-failed-${slugify(label)}`);
+    throw new Error(`${label} stayed on the landing page after repeated enroll recovery attempts.`);
+  };
+
   const ensureEnrolled = async () => {
     for (let attempt = 1; attempt <= 4; attempt++) {
       await goto(`${LEARN_BASE}/home/welcome`);
@@ -740,6 +770,9 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
         return true;
       }
       log(`not enrolled yet (attempt ${attempt}): url=${page.url()} enrollBtn=${enrollVisible} — clicking Enroll`);
+      if (!isProjectLanding()) {
+        await goto(COURSE_URL);
+      }
       await acceptCookies({ timeout: 4000 });
       // clickEnroll waits for hydration first so the real enroll XHR fires
       // instead of the GET-form fallback that just re-bounces to /projects/.
@@ -758,14 +791,14 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   await goto(COURSE_URL);
   await observer.capture("landing");
   await acceptCookies();  // dismiss the cookie banner before it blocks anything
-  await clickRole("button", /enroll for free/i, { timeout: 25000 });
+  await clickEnroll({ timeout: 25000 });
   // On slow (VPN) links the first click often registers but doesn't actually
   // open the sign-up form. In slow mode (SLOW_FACTOR >= 2) always give it a
   // second click after a short settle — optional, so it's a no-op/skip if the
   // form already opened (the button is gone once the form is up).
   if (TF >= 2) {
     await page.waitForTimeout(1500 * TF);
-    await clickRole("button", /enroll for free/i, { optional: true, timeout: 8000 });
+    await clickEnroll({ optional: true, timeout: 8000 });
   }
 
   // 2) Sign-up form
@@ -838,14 +871,14 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   await observer.capture("after-start-project");
 
   // 4) Mark the overview supplement complete
-  await goto(`${LEARN_BASE}${SUPPLEMENT_PATH}`);
+  await recoverFromLandingAndRetry(`${LEARN_BASE}${SUPPLEMENT_PATH}`, "supplement page");
   log(`supplement page URL: ${page.url()}`);
   await clickSel('button[data-testid="mark-complete"]', { optional: true, timeout: 12000 });
 
   // 4b) The ungraded lab: "Launch lab" opens a NEW TAB that redirects to .../lab, where an
   //     "Open" button spins up the lab environment (more tabs). We click Open, wait, then
   //     close every tab except the main course tab and carry on.
-  await goto(`${LEARN_BASE}${LAB_PATH}`);
+  await recoverFromLandingAndRetry(`${LEARN_BASE}${LAB_PATH}`, "lab page");
   await page.waitForTimeout(1000);
   try {
     const ctx = page.context();
@@ -888,11 +921,12 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   }
 
   // 5) Open the graded assignment and start it
-  await goto(`${LEARN_BASE}${ASSIGNMENT_PATH}`);
+  await recoverFromLandingAndRetry(`${LEARN_BASE}${ASSIGNMENT_PATH}`, "assignment page");
   log(`assignment page URL: ${page.url()}`);
   // If the session was dropped, the assignment URL shows a login wall instead of
   // the quiz — re-authenticate and reload before trying to answer/submit.
   await ensureLoggedIn(`${LEARN_BASE}${ASSIGNMENT_PATH}`);
+  await recoverFromLandingAndRetry(`${LEARN_BASE}${ASSIGNMENT_PATH}`, "assignment page after login");
   await clickSel('button[data-testid="continue-button"]', { optional: true, timeout: 8000 });
   await clickSel('button[data-testid="CoverPageActionButton"]', { optional: true, timeout: 10000 });
   await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
@@ -964,7 +998,7 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   await observer.capture("after-quiz-submit");
 
   // 7b) Complete the course-end survey item (a required item for 100% completion).
-  await goto(`${LEARN_BASE}${SURVEY_PATH}`);
+  await recoverFromLandingAndRetry(`${LEARN_BASE}${SURVEY_PATH}`, "survey page");
   await clickRole("button", /^continue$/i, { optional: true, timeout: 6000 });
   await clickSel('button[data-testid="mark-complete"]', { optional: true, timeout: 10000 });
 
