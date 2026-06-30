@@ -126,5 +126,6 @@ else:
     env.pop("END", None)
 env["CONCURRENCY"] = str(CONCURRENCY)
 env["HEADLESS"] = "y" if HEADLESS else "n"
+env["COURSERA_COLAB"] = "1"
 if not run("node coursera_manual_runner.js", env=env):
     sys.exit("The runner exited with an error.")

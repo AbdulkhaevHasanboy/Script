@@ -127,6 +127,9 @@ const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || "artifacts";
 const OBSERVE_VERBOSE = /^(1|y|yes|true)$/i.test(process.env.OBSERVE_VERBOSE || "");
 const CERT_ATTEMPTS = Number.parseInt(process.env.CERT_ATTEMPTS || "8", 10);
 const CERT_WAIT_MS = Number.parseInt(process.env.CERT_WAIT_MS || "10000", 10);
+const COLAB_RECOVERY = /^(1|y|yes|true)$/i.test(
+  process.env.COURSERA_COLAB || process.env.COLAB_RECOVERY || process.env.GOOGLE_COLAB || "",
+);
 // The graded-quiz answers the recorded student selected (stable per-course content IDs).
 const QUIZ_ANSWER_IDS = [
   "2TwGVWrREeqKFQpvVMrRlw",
@@ -700,11 +703,14 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
     // instead of the dumb GET-form fallback that doesn't actually enroll.
     await page.waitForLoadState("networkidle", { timeout: 8000 * TF }).catch(() => {});
     await page.waitForTimeout(1200 * TF);
-    const byE2e = page.locator('[data-e2e="enroll-button"]').filter({ visible: true }).first();
-    if (await byE2e.count().catch(() => 0)) {
+    const bySelector = page
+      .locator('[data-e2e="enroll-button"], button:has-text("Enroll for free")')
+      .filter({ visible: true })
+      .first();
+    if (await bySelector.count().catch(() => 0)) {
       try {
-        await byE2e.click({ timeout: timeout * TF });
-        log('clicked [data-e2e="enroll-button"]');
+        await bySelector.click({ timeout: timeout * TF });
+        log('clicked enroll button');
         return true;
       } catch (e) { /* fall through to the text-based locator below */ }
     }
@@ -720,26 +726,29 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   // actually land on a /learn/ URL (not bounced to /projects/); if we got bounced
   // it re-clicks Enroll (incl. the modal-confirm variant) and waits for the
   // redirect, retrying a few times. Returns true once enrolled.
-  // The real enroll button on the consumer project page carries a stable
-  // attribute hook: <button ... data-e2e="enroll-button">Enroll for free</button>.
-  // We target that directly instead of the text regex /enroll for free/i, which
-  // also matches the recommended-course cards in the sidebar (the only /learn/
-  // links present on the bounced page point to *other* courses, not this one).
-  // The presence of [data-e2e="enroll-button"] is itself the "still unenrolled"
-  // signal — more reliable than guessing from the URL alone.
-  const ENROLL_BTN = 'button[data-e2e="enroll-button"]';
+  // The real enroll button usually carries data-e2e="enroll-button", but the
+  // Colab failure artifact showed a plain submit button with only visible text.
+  // Treat either shape as the "still unenrolled" signal.
+  const ENROLL_BTN = 'button[data-e2e="enroll-button"], button:has-text("Enroll for free")';
+  const countEnrollButtons = async () =>
+    await page.locator(ENROLL_BTN).filter({ visible: true }).count().catch(() => 0);
   const isProjectLanding = () => {
     const url = page.url();
     return /coursera\.org\/projects\//i.test(url);
   };
 
   const recoverFromLandingAndRetry = async (targetUrl, label = "course page") => {
+    if (!COLAB_RECOVERY) {
+      await goto(targetUrl);
+      return true;
+    }
+
     const targetPath = new URL(targetUrl).pathname;
     for (let attempt = 1; attempt <= 3; attempt++) {
       await goto(targetUrl);
       const currentPath = new URL(page.url()).pathname;
       const onTargetCourse = page.url().startsWith(LEARN_BASE) && currentPath === targetPath;
-      const enrollVisible = await page.locator(ENROLL_BTN).filter({ visible: true }).count().catch(() => 0);
+      const enrollVisible = await countEnrollButtons();
       if (onTargetCourse && !enrollVisible) {
         if (attempt > 1) log(`${label} reached after landing recovery: ${page.url()}`);
         return true;
@@ -764,7 +773,7 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
       // Enrolled iff we land on a /learn/ URL AND the project page's enroll
       // button is gone (it lingers in the DOM on the bounced marketing page).
       const onLearn = /\/learn\//.test(page.url());
-      const enrollVisible = await page.locator(ENROLL_BTN).filter({ visible: true }).count().catch(() => 0);
+      const enrollVisible = await countEnrollButtons();
       if (onLearn && !enrollVisible) {
         log(`enrollment confirmed (attempt ${attempt}): ${page.url()}`);
         return true;
@@ -783,7 +792,7 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
       await page.waitForURL(/\/learn\//, { timeout: 20000 }).catch(() => {});
     }
     // Final verdict: on /learn/ and no enroll button left to click.
-    const stillEnroll = await page.locator(ENROLL_BTN).filter({ visible: true }).count().catch(() => 0);
+    const stillEnroll = await countEnrollButtons();
     return /\/learn\//.test(page.url()) && !stillEnroll;
   };
 

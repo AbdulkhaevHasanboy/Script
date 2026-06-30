@@ -296,6 +296,7 @@ def run_project(base):
     env = dict(os.environ)
     env["CONCURRENCY"] = str(CONCURRENCY)
     env["HEADLESS"] = "y" if HEADLESS else "n"
+    env["COURSERA_COLAB"] = "1"
     if CHANNEL:
         env["CHANNEL"] = CHANNEL
     # Route the browser through a residential proxy (the real fix for Colab's
