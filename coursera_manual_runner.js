@@ -11,25 +11,115 @@ const stealth = require("puppeteer-extra-plugin-stealth")();
 chromium.use(stealth);
 
 const CSV_FILE = "students.csv";
-const USER_AGENT =
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36";
 const COURSE_URL = "https://www.coursera.org/projects/build-a-computer-vision-app-with-azure-cognitive-services";
 
-const COURSERA_BROWSER_HEADERS = {
-  "accept-language": "en-US,en;q=0.9,uz;q=0.8",
-  "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
-  "sec-ch-ua-mobile": "?0",
-  "sec-ch-ua-platform": '"Linux"',
-};
+const COURSERA_BROWSER_PROFILES = [
+  {
+    name: "linux-us-east",
+    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    headers: {
+      "accept-language": "en-US,en;q=0.9",
+      "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"Linux"',
+    },
+    locale: "en-US",
+    timezoneId: "America/New_York",
+    geolocation: { latitude: 40.7128, longitude: -74.0060 },
+  },
+  {
+    name: "linux-us-west",
+    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    headers: {
+      "accept-language": "en-US,en;q=0.9,uz;q=0.7",
+      "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"Linux"',
+    },
+    locale: "en-US",
+    timezoneId: "America/Los_Angeles",
+    geolocation: { latitude: 34.0522, longitude: -118.2437 },
+  },
+  {
+    name: "linux-gb",
+    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    headers: {
+      "accept-language": "en-GB,en;q=0.9,en-US;q=0.8",
+      "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"Linux"',
+    },
+    locale: "en-GB",
+    timezoneId: "Europe/London",
+    geolocation: { latitude: 51.5072, longitude: -0.1276 },
+  },
+  {
+    name: "linux-ca",
+    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    headers: {
+      "accept-language": "en-CA,en;q=0.9,en-US;q=0.8",
+      "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"Linux"',
+    },
+    locale: "en-CA",
+    timezoneId: "America/Toronto",
+    geolocation: { latitude: 43.6532, longitude: -79.3832 },
+  },
+  {
+    name: "linux-au",
+    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    headers: {
+      "accept-language": "en-AU,en;q=0.9,en-US;q=0.8",
+      "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"Linux"',
+    },
+    locale: "en-AU",
+    timezoneId: "Australia/Sydney",
+    geolocation: { latitude: -33.8688, longitude: 151.2093 },
+  },
+];
+const USER_AGENT = COURSERA_BROWSER_PROFILES[0].userAgent;
+const COURSERA_BROWSER_HEADERS = COURSERA_BROWSER_PROFILES[0].headers;
+const PROFILE_BATCH_SIZE = 5;
+const profileOrder = COURSERA_BROWSER_PROFILES
+  .map((_, index) => index)
+  .sort(() => Math.random() - 0.5);
+let profileSequence = 0;
+
+function courseraProfileForSequence(sequence) {
+  const batch = Math.floor(sequence / PROFILE_BATCH_SIZE);
+  const index = profileOrder[batch % profileOrder.length];
+  return COURSERA_BROWSER_PROFILES[index];
+}
+
+function nextCourseraProfile() {
+  const profile = courseraProfileForSequence(profileSequence);
+  profileSequence += 1;
+  return profile;
+}
 
 const COURSERA_SENTRY_ENVELOPE_URL =
   "https://o75955.ingest.sentry.io/api/4505745374576640/envelope/**";
 
-async function applyCourseraNetworkProfile(context) {
+function courseraContextOptions({ width = 1920, height = 1080, locale = null, profile = COURSERA_BROWSER_PROFILES[0] } = {}) {
+  return {
+    viewport: { width, height },
+    userAgent: profile.userAgent,
+    locale: locale || profile.locale,
+    timezoneId: profile.timezoneId,
+    geolocation: profile.geolocation,
+    permissions: ["geolocation"],
+    extraHTTPHeaders: profile.headers,
+  };
+}
+
+async function applyCourseraNetworkProfile(context, profile = COURSERA_BROWSER_PROFILES[0]) {
   await context.route(COURSERA_SENTRY_ENVELOPE_URL, async (route, request) => {
     const headers = {
       ...request.headers(),
-      ...COURSERA_BROWSER_HEADERS,
+      ...profile.headers,
       accept: "*/*",
       "content-type": "text/plain;charset=UTF-8",
       origin: "https://www.coursera.org",
@@ -37,7 +127,7 @@ async function applyCourseraNetworkProfile(context) {
       "sec-fetch-dest": "empty",
       "sec-fetch-mode": "cors",
       "sec-fetch-site": "cross-site",
-      "user-agent": USER_AGENT,
+      "user-agent": profile.userAgent,
       priority: "u=1, i",
     };
     await route.continue({ headers });
@@ -415,7 +505,7 @@ async function saveStudents(csvFile, headers, students) {
   await fs.writeFile(csvFile, `${lines.join("\n")}\n`, "utf8");
 }
 
-async function submitToGoogleForm(browser, fullName, email, password, certUrl, logPrefix = "") {
+async function submitToGoogleForm(browser, fullName, email, password, certUrl, logPrefix = "", profile = COURSERA_BROWSER_PROFILES[0]) {
   const prefix = logPrefix ? `${logPrefix} ` : "";
   const log = (m) => console.log(`  ${prefix}[google-form] ${m}`);
 
@@ -428,13 +518,8 @@ async function submitToGoogleForm(browser, fullName, email, password, certUrl, l
     }
   } catch (e) {}
 
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 800 },
-    userAgent: USER_AGENT,
-    locale: "uz-UZ",
-    extraHTTPHeaders: COURSERA_BROWSER_HEADERS,
-  });
-  await applyCourseraNetworkProfile(context);
+  const context = await browser.newContext(courseraContextOptions({ width: 1280, height: 800, locale: "uz-UZ", profile }));
+  await applyCourseraNetworkProfile(context, profile);
   await context.addInitScript(STEALTH_SCRIPT);
   const page = await context.newPage();
   try {
@@ -995,16 +1080,15 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
 
   // 7) Honor code + submit
   await fillSel('input[data-testid="honor-code-legal-name-input"]', FULL, { optional: true });
-  // Don't fire the submit instantly — the answers + legal name need a moment to
-  // register, otherwise the click happens so fast the submission doesn't go through.
-  // Pause ~4s (scaled in slow mode) so the page has settled before we submit.
-  await page.waitForTimeout(4000 * TF);
   // The submit button often sits below the fold and behind lazy-rendered content;
   // scroll it into view first so the click isn't intercepted, then click.
   const submitBtn = page.locator('button[data-testid="submit-button"]').filter({ visible: true }).first();
   await submitBtn.scrollIntoViewIfNeeded({ timeout: 5000 * TF }).catch(() => {});
   await clickSel('button[data-testid="submit-button"]', { timeout: 10000 });
   await clickSel('button[data-testid="dialog-submit-button"]', { timeout: 12000 });
+  // After confirming the quiz submit, stay on the page briefly so Coursera can
+  // persist the submission state before we move to the next course item.
+  await page.waitForTimeout(4000 * TF);
   await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
   await observer.capture("after-quiz-submit");
 
@@ -1216,16 +1300,11 @@ async function buildStudentFromClaim(claim) {
 }
 
 // Run the whole course flow for one student in Chromium, returning { cert, error }.
-async function runFlowWithFallbacks(browser, student, headless, logPrefix) {
+async function runFlowWithFallbacks(browser, student, headless, logPrefix, profile = COURSERA_BROWSER_PROFILES[0]) {
   let cert = "";
   let error = "";
-  const context = await browser.newContext({
-    viewport: { width: 1920, height: 1080 },
-    userAgent: USER_AGENT,
-    locale: "en-US",
-    extraHTTPHeaders: COURSERA_BROWSER_HEADERS,
-  });
-  await applyCourseraNetworkProfile(context);
+  const context = await browser.newContext(courseraContextOptions({ profile }));
+  await applyCourseraNetworkProfile(context, profile);
   await context.addInitScript(STEALTH_SCRIPT);
   const page = await context.newPage();
   try {
@@ -1322,9 +1401,12 @@ async function runCoordinatorMode(config) {
           .catch(() => {});
       }, heartbeatMs);
 
+      const profile = nextCourseraProfile();
+      console.log(`${logPrefix} [queue:w${wid}] browser profile: ${profile.name} (cycles every ${PROFILE_BATCH_SIZE} students)`);
+
       let result = { cert: "", error: "" };
       try {
-        result = await runFlowWithFallbacks(browser, student, headless, logPrefix);
+        result = await runFlowWithFallbacks(browser, student, headless, logPrefix, profile);
       } catch (e) {
         result = { cert: "", error: e.message };
       } finally {
@@ -1333,7 +1415,7 @@ async function runCoordinatorMode(config) {
 
       if (result.cert) {
         try {
-          await submitToGoogleForm(browser, fullName, student.email, student.password, result.cert, logPrefix);
+          await submitToGoogleForm(browser, fullName, student.email, student.password, result.cert, logPrefix, profile);
         } catch (errForm) {
           console.error(`${logPrefix} [queue] Google Form submission failed: ${errForm.message}`);
         }
@@ -1575,14 +1657,11 @@ async function main() {
 
         const logPrefix = `[${student.student_id || student.first_name}]`;
         console.log(`\n${logPrefix} Starting flow (${index + 1}/${runStudents.length}): ${fullName} / ${student.email}`);
+        const profile = courseraProfileForSequence(index);
+        console.log(`${logPrefix} Browser profile: ${profile.name} (cycles every ${PROFILE_BATCH_SIZE} students)`);
 
-        const context = await browser.newContext({
-          viewport: { width: 1920, height: 1080 },
-          userAgent: USER_AGENT,
-          locale: "en-US",
-          extraHTTPHeaders: COURSERA_BROWSER_HEADERS,
-        });
-        await applyCourseraNetworkProfile(context);
+        const context = await browser.newContext(courseraContextOptions({ profile }));
+        await applyCourseraNetworkProfile(context, profile);
         await context.addInitScript(STEALTH_SCRIPT);
 
         const page = await context.newPage();
@@ -1603,7 +1682,7 @@ async function main() {
 
         try {
           if (student.certificate_url) {
-            await submitToGoogleForm(browser, fullName, student.email, student.password, student.certificate_url, logPrefix);
+            await submitToGoogleForm(browser, fullName, student.email, student.password, student.certificate_url, logPrefix, profile);
           }
         } catch (errForm) {
           console.error(`\n${logPrefix} [AUTO] Google Form submission failed: ${errForm.message}`);
@@ -1652,6 +1731,8 @@ async function main() {
       console.log(`Email:   ${student.email}`);
       console.log(`Pass:    ${password}`);
       console.log(`Mode:    ${mode.toUpperCase()}`);
+      const profile = nextCourseraProfile();
+      console.log(`Browser profile: ${profile.name} (cycles every ${PROFILE_BATCH_SIZE} students)`);
       if (mode === "manual") {
         console.log("Complete the signup/course/certificate steps manually in the browser.");
       } else if (mode === "record") {
@@ -1661,13 +1742,8 @@ async function main() {
       }
       console.log("============================================================");
 
-      const context = await browser.newContext({
-        viewport: { width: 1920, height: 1080 },
-        userAgent: USER_AGENT,
-        locale: "en-US",
-        extraHTTPHeaders: COURSERA_BROWSER_HEADERS,
-      });
-      await applyCourseraNetworkProfile(context);
+      const context = await browser.newContext(courseraContextOptions({ profile }));
+      await applyCourseraNetworkProfile(context, profile);
       await context.addInitScript(STEALTH_SCRIPT);
 
       const recordedSteps = [];
@@ -2099,7 +2175,7 @@ async function main() {
       }
 
       if (student.certificate_url) {
-        await submitToGoogleForm(browser, fullName, student.email, student.password, student.certificate_url);
+        await submitToGoogleForm(browser, fullName, student.email, student.password, student.certificate_url, "", profile);
       }
 
       await saveStudents(CSV_FILE, headers, students);
