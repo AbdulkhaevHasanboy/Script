@@ -43,3 +43,8 @@ Notes:
 - For extra screenshots after each navigation, run `npm run auto:verbose`.
 - Certificate polling can be tuned with `CERT_ATTEMPTS=12` and
   `CERT_WAIT_MS=15000`.
+- AUTO mode keeps the original safer extra clicks by default. Use `EXTRA=n` to
+  skip duplicate fallback clicks. Use `OPEN_LAB=n` separately to skip the slow
+  external lab launch.
+- Enable the Browsec VPN extension using `VPN=y` (or `VPM=y` / `BROWSEC=y`). Default is `n` (disabled).
+- For slow networks or VPN links, use `SPEED=2` (or `SLOW_FACTOR=2`) to multiply timeouts and make actions 2x slower (longer wait times) to prevent load failures. If a VPN is enabled, a default timeout multiplier of 2 is automatically applied unless overridden.

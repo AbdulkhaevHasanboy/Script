@@ -28,6 +28,9 @@ CONCURRENCY = 1      # how many browsers run in parallel (per PC)
 # virtual display (Xvfb) — you don't need to do anything.
 CHANNEL = "chrome"
 HEADLESS = False     # False = headful (least CAPTCHA; auto-uses Xvfb on Colab)
+# --- VPN & Speed settings ----------------------------------------------------
+VPN = "n"            # "y" to enable Browsec VPN extension, "n" to disable
+SPEED = 1            # Timeout multiplier: 2 means 2x slower actions (defaults to 2 automatically if VPN is enabled)
 # --- Proxy (the real fix for Colab CAPTCHA) ----------------------------------
 # Colab runs on Google DATACENTER IPs, which Coursera challenges on signup even
 # with real Chrome. The only thing that changes that is exiting through a
@@ -299,6 +302,8 @@ def run_project(base):
     env["COURSERA_COLAB"] = "1"
     if CHANNEL:
         env["CHANNEL"] = CHANNEL
+    env["VPN"] = str(VPN)
+    env["SPEED"] = str(SPEED)
     # Route the browser through a residential proxy (the real fix for Colab's
     # datacenter-IP CAPTCHA). On Linux, Chromium reads these standard proxy env
     # vars for its system proxy, so the browser exits through PROXY's IP.

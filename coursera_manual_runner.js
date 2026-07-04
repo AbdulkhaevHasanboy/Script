@@ -5,6 +5,7 @@ const readline = require("node:readline/promises");
 const { stdin: input, stdout: output } = require("node:process");
 const { execFileSync, execSync } = require("node:child_process");
 const { chromium } = require("playwright-extra");
+const { skip } = require("node:test");
 const stealth = require("puppeteer-extra-plugin-stealth")();
 
 // Apply the stealth plugin: spoofs navigator.webdriver, plugins, WebGL, etc.
@@ -12,6 +13,150 @@ chromium.use(stealth);
 
 const CSV_FILE = "students.csv";
 const COURSE_URL = "https://www.coursera.org/projects/build-a-computer-vision-app-with-azure-cognitive-services";
+const BROWSEC_EXTENSION_ID = "omghfjlpggmjjaagoclmmobgdodcjboh";
+const DEFAULT_BROWSEC_EXTENSION_PATH = path.resolve(__dirname, "extensions", "browsec");
+
+// Heuristic reinforcement / adaptive learning metrics
+let globalConsecutiveSuccesses = 0;
+let globalSuccessStreak = 0;
+let globalRemediationFactor = 1.0;
+let lastSuccessfulEnrollButtonText = null;
+let globalConsecutiveFailures = 0;
+let cooldownActive = false;
+
+// Dynamic Action-State Q-Table for button weight learning
+let globalActionWeights = {};
+
+async function loadLearnedWeights() {
+  try {
+    const data = await fs.readFile("learned_weights.json", "utf8");
+    globalActionWeights = JSON.parse(data);
+    console.log(`[RL] Loaded ${Object.keys(globalActionWeights).length} learned state profiles from learned_weights.json`);
+  } catch {
+    globalActionWeights = {};
+    console.log("[RL] No learned_weights.json found, starting with empty/default Q-table.");
+  }
+}
+
+async function saveLearnedWeights() {
+  try {
+    await fs.writeFile("learned_weights.json", JSON.stringify(globalActionWeights, null, 2), "utf8");
+  } catch (e) {
+    // ignore write errors
+  }
+}
+
+function getPageStateKey(pageUrl, pageText = "", profileName = "default", vpnCountry = "default") {
+  try {
+    const url = new URL(pageUrl);
+    // Dynamic key incorporating browser profile and active VPN location
+    let key = `${url.pathname}@${profileName}@${vpnCountry}`;
+    if (pageText.includes("unexpected error")) key += "#error";
+    if (pageText.includes("Terms of Use")) key += "#tou";
+    if (pageText.includes("onetrust")) key += "#cookies";
+    return key;
+  } catch {
+    return "unknown";
+  }
+}
+
+async function adaptiveEnrollDecision(page, log, TF = 1.0, profileName = "default", vpnCountry = "default") {
+  const currentUrl = page.url();
+  const bodyText = await page.innerText("body").catch(() => "");
+  const stateKey = getPageStateKey(currentUrl, bodyText, profileName, vpnCountry);
+
+  // Find all visible clickable elements
+  const buttonLocators = await page.locator('button, [role="button"], a.btn, a[href*="enroll"], input[type="button"], input[type="submit"]').all().catch(() => []);
+  const visibleButtons = [];
+
+  for (const loc of buttonLocators) {
+    try {
+      const isVisible = await loc.isVisible().catch(() => false);
+      if (!isVisible) continue;
+
+      // Filter out buttons located in the global header or navigation elements
+      const inHeaderOrNav = await loc.evaluate(el => {
+        return !!el.closest('header, nav, [role="navigation"], [data-testid="header"]');
+      }).catch(() => false);
+      if (inHeaderOrNav) continue;
+
+      const rawText = await loc.innerText().catch(() => "");
+      const text = rawText.trim().toLowerCase().replace(/\s+/g, " ");
+      if (!text) continue;
+
+      if (!globalActionWeights[stateKey]) {
+        globalActionWeights[stateKey] = {};
+      }
+      if (globalActionWeights[stateKey][text] === undefined) {
+        // Bootstrap initial weights to guide early learning
+        let initialWeight = 1.0;
+        if (/^(continue|go to course|start learning|go to first project|enroll for free)$/i.test(text)) {
+          initialWeight = 10.0;
+        } else if (/accept/i.test(text)) {
+          initialWeight = 5.0;
+        } else if (/close|cancel/i.test(text)) {
+          initialWeight = 0.5;
+        }
+        globalActionWeights[stateKey][text] = initialWeight;
+      }
+
+      visibleButtons.push({
+        locator: loc,
+        text,
+        weight: globalActionWeights[stateKey][text]
+      });
+    } catch {
+      // ignore detached elements
+    }
+  }
+
+  if (visibleButtons.length === 0) {
+    return false;
+  }
+
+  // Sort choices by learned weight descending
+  visibleButtons.sort((a, b) => b.weight - a.weight);
+
+  // Filter out heavily penalized options to avoid wasting time
+  const candidates = visibleButtons.filter(b => b.weight > -5.0);
+  if (candidates.length === 0) return false;
+
+  log(`[RL] State [${stateKey}] visible buttons: ` +
+    candidates.map(b => `"${b.text}"(w:${b.weight.toFixed(1)})`).join(", ")
+  );
+
+  // Attempt the best choice
+  const choice = candidates[0];
+  log(`[RL] Decision: Attempting to click "${choice.text}"`);
+  const preUrl = page.url();
+  
+  try {
+    // Dynamic click timeout scaled by the slowdown TF factor to prevent false timing drops on slower VPNs
+    await choice.locator.click({ timeout: Math.max(5000, 5000 * TF) });
+    await page.waitForLoadState("networkidle", { timeout: 2500 }).catch(() => {});
+    
+    const postUrl = page.url();
+    if (postUrl !== preUrl || postUrl.includes("/learn/")) {
+      // Reward
+      globalActionWeights[stateKey][choice.text] += 3.0;
+      log(`[RL] Reward: +3.0 to "${choice.text}" in state [${stateKey}] (new weight: ${globalActionWeights[stateKey][choice.text].toFixed(1)})`);
+      await saveLearnedWeights().catch(() => {});
+      return true;
+    } else {
+      // Penalize slightly
+      globalActionWeights[stateKey][choice.text] -= 1.0;
+      log(`[RL] Penalty: -1.0 to "${choice.text}" (no state change, new weight: ${globalActionWeights[stateKey][choice.text].toFixed(1)})`);
+      await saveLearnedWeights().catch(() => {});
+    }
+  } catch (e) {
+    // Penalize heavily for failure
+    globalActionWeights[stateKey][choice.text] -= 3.0;
+    log(`[RL] Penalty: -3.0 to "${choice.text}" due to failure: ${e.message.split("\n")[0]} (new weight: ${globalActionWeights[stateKey][choice.text].toFixed(1)})`);
+    await saveLearnedWeights().catch(() => {});
+  }
+  
+  return true;
+}
 
 const COURSERA_BROWSER_PROFILES = [
   {
@@ -26,6 +171,58 @@ const COURSERA_BROWSER_PROFILES = [
     locale: "en-US",
     timezoneId: "America/New_York",
     geolocation: { latitude: 40.7128, longitude: -74.0060 },
+  },
+  {
+    name: "windows-us-west",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    headers: {
+      "accept-language": "en-US,en;q=0.9",
+      "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"Windows"',
+    },
+    locale: "en-US",
+    timezoneId: "America/Los_Angeles",
+    geolocation: { latitude: 34.0522, longitude: -118.2437 },
+  },
+  {
+    name: "macos-us-east",
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    headers: {
+      "accept-language": "en-US,en;q=0.9",
+      "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"macOS"',
+    },
+    locale: "en-US",
+    timezoneId: "America/New_York",
+    geolocation: { latitude: 40.7128, longitude: -74.0060 },
+  },
+  {
+    name: "windows-gb",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    headers: {
+      "accept-language": "en-GB,en;q=0.9,en-US;q=0.8",
+      "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"Windows"',
+    },
+    locale: "en-GB",
+    timezoneId: "Europe/London",
+    geolocation: { latitude: 51.5072, longitude: -0.1276 },
+  },
+  {
+    name: "macos-ca",
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    headers: {
+      "accept-language": "en-CA,en;q=0.9,en-US;q=0.8",
+      "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"macOS"',
+    },
+    locale: "en-CA",
+    timezoneId: "America/Toronto",
+    geolocation: { latitude: 43.6532, longitude: -79.3832 },
   },
   {
     name: "linux-us-west",
@@ -52,32 +249,6 @@ const COURSERA_BROWSER_PROFILES = [
     locale: "en-GB",
     timezoneId: "Europe/London",
     geolocation: { latitude: 51.5072, longitude: -0.1276 },
-  },
-  {
-    name: "linux-ca",
-    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
-    headers: {
-      "accept-language": "en-CA,en;q=0.9,en-US;q=0.8",
-      "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Linux"',
-    },
-    locale: "en-CA",
-    timezoneId: "America/Toronto",
-    geolocation: { latitude: 43.6532, longitude: -79.3832 },
-  },
-  {
-    name: "linux-au",
-    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
-    headers: {
-      "accept-language": "en-AU,en;q=0.9,en-US;q=0.8",
-      "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Linux"',
-    },
-    locale: "en-AU",
-    timezoneId: "Australia/Sydney",
-    geolocation: { latitude: -33.8688, longitude: 151.2093 },
   },
 ];
 const USER_AGENT = COURSERA_BROWSER_PROFILES[0].userAgent;
@@ -199,11 +370,143 @@ function chromiumLaunchOptions(headless) {
     "--disable-features=IsolateOrigins,site-per-process",
     "--no-sandbox",
   ];
+  const browsecPath = browsecExtensionPath();
+  if (browsecEnabled()) {
+    args.push(
+      `--disable-extensions-except=${browsecPath}`,
+      `--load-extension=${browsecPath}`,
+    );
+  }
   if (!headless) args.push("--start-maximized");
   const opts = { headless, args };
   const channel = process.env.CHANNEL || process.env.BROWSER_CHANNEL;
   if (channel) opts.channel = channel; // e.g. CHANNEL=chrome -> real Google Chrome
+  if (browsecEnabled()) opts.ignoreDefaultArgs = ["--disable-extensions"];
   return opts;
+}
+
+function browsecEnabled() {
+  return /^(1|y|yes|true)$/i.test(
+    process.env.VPN || process.env.VPM || process.env.BROWSEC || process.env.USE_BROWSEC || ""
+  );
+}
+
+function browsecExtensionPath() {
+  return path.resolve(process.env.BROWSEC_EXTENSION_PATH || DEFAULT_BROWSEC_EXTENSION_PATH);
+}
+
+function browsecCountry() {
+  return String(process.env.BROWSEC_COUNTRY || "us").trim().toLowerCase();
+}
+
+async function assertBrowsecExtensionReady() {
+  if (!browsecEnabled()) return;
+  const manifestPath = path.join(browsecExtensionPath(), "manifest.json");
+  try {
+    await fs.access(manifestPath);
+  } catch {
+    throw new Error(
+      `VPN is enabled but Browsec extension was not found at ${browsecExtensionPath()}.\n` +
+      "Set BROWSEC_EXTENSION_PATH to the unpacked extension folder containing manifest.json.",
+    );
+  }
+}
+
+async function createBrowserController(headless) {
+  if (!browsecEnabled()) {
+    const browser = await chromium.launch(chromiumLaunchOptions(headless));
+    return {
+      async newContext(options) {
+        return await browser.newContext(options);
+      },
+      async close() {
+        await browser.close().catch(() => {});
+      },
+    };
+  }
+
+  await assertBrowsecExtensionReady();
+  if (headless) {
+    console.log("-> BROWSEC=y requires extensions, so using HEADFUL Chromium.");
+  }
+
+  return {
+    async newContext(options) {
+      const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "coursera-browsec-"));
+      const context = await chromium.launchPersistentContext(userDataDir, {
+        ...chromiumLaunchOptions(false),
+        ...options,
+      });
+      await enableBrowsecVpn(context);
+      const originalClose = context.close.bind(context);
+      context.close = async (...args) => {
+        try {
+          await originalClose(...args);
+        } finally {
+          await fs.rm(userDataDir, { recursive: true, force: true }).catch(() => {});
+        }
+      };
+      return context;
+    },
+    async close() {},
+  };
+}
+
+async function enableBrowsecVpn(context) {
+  const country = browsecCountry();
+  const extensionUrlPrefix = `chrome-extension://${BROWSEC_EXTENSION_ID}/`;
+  const existingWorker = context
+    .serviceWorkers()
+    .find((worker) => worker.url().startsWith(extensionUrlPrefix));
+  const worker = existingWorker || await context.waitForEvent("serviceworker", {
+    timeout: 15000,
+    predicate: (worker) => worker.url().startsWith(extensionUrlPrefix),
+  });
+
+  const state = await worker.evaluate(async (country) => {
+    const waitFor = async (predicate, timeoutMs = 15000) => {
+      const started = Date.now();
+      while (Date.now() - started < timeoutMs) {
+        if (await predicate()) return true;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      return false;
+    };
+
+    const ready = await waitFor(() => self.store && self.highLevelPac && self.proxy);
+    if (!ready) throw new Error("Browsec background API did not become ready.");
+
+    await self.store.initiate();
+    await self.highLevelPac.setCountry(country);
+    if (self.reloadFullServersChain) {
+      await self.reloadFullServersChain().catch(() => {});
+    }
+    await self.proxy.setFromStore();
+    await waitFor(async () => {
+      const { lowLevelPac } = await self.store.getStateAsync();
+      return lowLevelPac && lowLevelPac.globalReturn === country;
+    }, 10000);
+
+    const { userPac, lowLevelPac, proxyServers } = await self.store.getStateAsync();
+    return {
+      mode: userPac.mode,
+      country: userPac.country,
+      globalReturn: lowLevelPac.globalReturn || null,
+      freeCountries: Array.from(proxyServers.freeCountries ? proxyServers.freeCountries() : []),
+    };
+  }, country);
+
+  if (state.mode !== "proxy") {
+    throw new Error(`Browsec did not turn on. Current mode: ${state.mode || "(unknown)"}`);
+  }
+  if (state.country !== country || state.globalReturn !== country) {
+    console.warn(
+      `-> Browsec requested ${country}, current state: country=${state.country || "(none)"} ` +
+      `globalReturn=${state.globalReturn || "(none)"}. Free countries: ${state.freeCountries.join(", ") || "(unknown)"}`,
+    );
+  } else {
+    console.log(`-> Browsec VPN is ON (${country}).`);
+  }
 }
 
 // --- Course-specific constants for AUTO mode (derived from the recording) ---
@@ -220,6 +523,12 @@ const CERT_WAIT_MS = Number.parseInt(process.env.CERT_WAIT_MS || "10000", 10);
 const COLAB_RECOVERY = /^(1|y|yes|true)$/i.test(
   process.env.COURSERA_COLAB || process.env.COLAB_RECOVERY || process.env.GOOGLE_COLAB || "",
 );
+const envFlag = (name, defaultValue = false) => {
+  const value = process.env[name];
+  if (value == null || value === "") return defaultValue;
+  return /^(1|y|yes|true)$/i.test(value);
+};
+const extraButtonsEnabled = () => envFlag("EXTRA", envFlag("EXTRA_BUTTONS", true));
 // The graded-quiz answers the recorded student selected (stable per-course content IDs).
 const QUIZ_ANSWER_IDS = [
   "2TwGVWrREeqKFQpvVMrRlw",
@@ -252,6 +561,10 @@ async function safeGoto(page, url, { attempts = 3, timeout = 45000, log = () => 
     try {
       await page.goto(url, { waitUntil: "domcontentloaded", timeout });
       await page.waitForLoadState("networkidle", { timeout: 12000 }).catch(() => {});
+      if (await isCloudFrontBlockedPage(page)) {
+        log("CloudFront 403 block detected on this network.");
+        return false;
+      }
       return true;
     } catch (error) {
       log(`navigation attempt ${attempt}/${attempts} failed: ${error.message.split("\n")[0]}`);
@@ -259,6 +572,16 @@ async function safeGoto(page, url, { attempts = 3, timeout = 45000, log = () => 
     }
   }
   return false;
+}
+
+async function isCloudFrontBlockedPage(page) {
+  const text = await page
+    .locator("body")
+    .innerText({ timeout: 2000 })
+    .catch(() => "");
+  return /403 ERROR/i.test(text) &&
+    /request could not be satisfied/i.test(text) &&
+    /Generated by cloudfront/i.test(text);
 }
 
 async function analyzePage(page) {
@@ -601,16 +924,22 @@ function makeFreshEmail(student) {
 // data-testid / id) and known URLs — no recorded DOM paths, no timing waits. Playwright's
 // locators auto-wait for the element to be actionable, so this is both faster and far more
 // reliable than replaying coordinates. Returns the certificate URL (or "" if not reached).
-async function runAutomatedFlow(page, student, logPrefix = "") {
+async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   const FULL = `${student.first_name} ${student.last_name}`.trim();
   const prefix = logPrefix ? `${logPrefix} ` : "";
   const log = (m) => console.log(`  ${prefix}[auto] ${m}`);
   const observer = createObserver(page, student);
 
-  // Slow / VPN networks: SLOW_FACTOR (>= 1) multiplies EVERY wait below so a step
+  // Slow / VPN networks: SPEED or SLOW_FACTOR (>= 1) multiplies EVERY wait below so a step
   // doesn't fail just because a page or button took longer to arrive. Default 1
-  // (no change). Try SLOW_FACTOR=2 or 3 on a laggy VPN.
-  const TF = Math.max(1, Number(process.env.SLOW_FACTOR) || 1);
+  // (no change). If a VPN is enabled, default to 2 (2x slower) to prevent disasters.
+  const defaultSlowdown = browsecEnabled() ? 2 : 1;
+  const baseTF = Math.max(1, Number(process.env.SPEED) || Number(process.env.SLOW_FACTOR) || defaultSlowdown);
+  const speedScale = Math.max(0.7, 1.0 - (globalConsecutiveSuccesses * 0.1));
+  const TF = Math.max(1, baseTF * speedScale * globalRemediationFactor);
+  const profileName = profile ? profile.name : "default";
+  const vpnCountry = browsecEnabled() ? browsecCountry() : "default";
+  log(`Starting run with Speed Factor TF=${TF.toFixed(2)} (base=${baseTF}, successScale=${speedScale.toFixed(2)}, remediationScale=${globalRemediationFactor.toFixed(2)}, consecutiveSuccesses=${globalConsecutiveSuccesses})`);
   page.setDefaultNavigationTimeout(45000 * TF);
   page.setDefaultTimeout(15000 * TF);
 
@@ -674,6 +1003,12 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
     log(`goto ${url}`);
     await page.goto(url, { waitUntil: "domcontentloaded" }).catch(() => {});
     await page.waitForLoadState("networkidle", { timeout: 3000 * TF }).catch(() => {});
+    if (await isCloudFrontBlockedPage(page)) {
+      await observer.capture("cloudfront-403-block");
+      throw new Error(
+        "CloudFront 403 block detected. This network/IP is blocked; switch to a permitted network or resolve access with the site owner before retrying.",
+      );
+    }
     if (OBSERVE_VERBOSE) await observer.capture(`goto-${new URL(url).pathname}`);
   };
 
@@ -821,6 +1156,18 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
     const url = page.url();
     return /coursera\.org\/projects\//i.test(url);
   };
+  const isOnLearnCourse = async () =>
+    page.url().startsWith(LEARN_BASE) && !(await countEnrollButtons());
+  const settleAfterClick = async (clicked, { timeout = 4000, urlPattern = null } = {}) => {
+    if (!clicked) return;
+    const waits = [
+      page.waitForLoadState("networkidle", { timeout: timeout * TF }).catch(() => {}),
+    ];
+    if (urlPattern) {
+      waits.push(page.waitForURL(urlPattern, { timeout: timeout * TF }).catch(() => {}));
+    }
+    await Promise.race(waits);
+  };
 
   const recoverFromLandingAndRetry = async (targetUrl, label = "course page") => {
     if (!COLAB_RECOVERY) {
@@ -853,6 +1200,10 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   };
 
   const ensureEnrolled = async () => {
+    if (await isOnLearnCourse()) {
+      log(`enrollment confirmed from current page: ${page.url()}`);
+      return true;
+    }
     for (let attempt = 1; attempt <= 4; attempt++) {
       await goto(`${LEARN_BASE}/home/welcome`);
       // Enrolled iff we land on a /learn/ URL AND the project page's enroll
@@ -890,7 +1241,7 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   // open the sign-up form. In slow mode (SLOW_FACTOR >= 2) always give it a
   // second click after a short settle — optional, so it's a no-op/skip if the
   // form already opened (the button is gone once the form is up).
-  if (TF >= 2) {
+  if (extraButtonsEnabled() && TF >= 2) {
     await page.waitForTimeout(1500 * TF);
     await clickEnroll({ optional: true, timeout: 8000 });
   }
@@ -901,7 +1252,9 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
   await fillSel('input[name="name"]', FULL);
   await fillSel('input[name="password"]', student.password);
   await clickRole("button", /join for free/i);
-  await clickRole("button", /join for free/i, { optional: true, timeout: 1000 });
+  if (extraButtonsEnabled()) {
+    await clickRole("button", /join for free/i, { optional: true, timeout: 1000 });
+  }
   await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
   log(`after sign-up, URL: ${page.url()}`);
   await observer.capture("after-signup");
@@ -933,36 +1286,52 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
     }
   }
 
-  // 3) Finish enrollment: the success screen shows a "Continue" (or "Go to course") that
-  //    enrolls and drops you into the course. It can take ~10s to appear, so wait generously
-  //    and then wait to actually land on a /learn/ or /home page.
-  //    The cookie-consent dialog frequently appears on THIS success screen and
-  //    sits on top of the Continue button — accept it first so the click lands.
+  // 3) Finish enrollment: run adaptive decision loop until we land in the course (/learn/)
+  const enrollDeadline = Date.now() + 50000 * TF;
+  log("Entering adaptive reinforcement learning enrollment loop...");
+  
   await acceptCookies({ timeout: 6000 });
-  await clickRole("button", /^(continue|go to course|start learning)$/i, { optional: true, timeout: 25000 });
-  await clickRole("button", /i accept/i, { optional: true, timeout: 8000 });
-  await clickRole("button", /^(continue|go to course|start learning)$/i, { optional: true, timeout: 25000 });
+  
+  while (Date.now() < enrollDeadline && !(await isOnLearnCourse())) {
+    // Fail fast if we get CAPTCHAd or blocked during this phase
+    const bodyText = await page.innerText("body").catch(() => "");
+    if (bodyText.includes("unexpected error") || bodyText.includes("Please solve this puzzle") || bodyText.includes("verify you are human")) {
+      throw new Error("Enrollment blocked: CAPTCHA or unexpected error detected during enrollment loop.");
+    }
 
-  // Use the hydration-aware enroll click so the real XHR fires rather than the
-  // native GET-form fallback (which only reloads /projects/?action=enroll).
-  await clickEnroll({ optional: true, timeout: 8000 });
-  await clickEnroll({ optional: true, timeout: 8000 });
+    const madeMove = await adaptiveEnrollDecision(page, log, TF, profileName, vpnCountry);
+    if (!madeMove) {
+      log("No confident buttons found via adaptive learning, trying clickEnroll fallback...");
+      const clicked = await clickEnroll({ optional: true, timeout: 8000 });
+      if (clicked) {
+        await settleAfterClick(clicked, { timeout: 6000, urlPattern: /\/learn\// });
+      } else {
+        await page.waitForTimeout(2000 * TF);
+      }
+    }
+  }
   // After the Enroll/Continue clicks above, Coursera should redirect into the
-  // course. Verify it actually took: ensureEnrolled navigates to the course home
-  // and confirms we land on a /learn/ URL instead of bouncing back to the
-  // /projects/ marketing page. If enrollment never completes there is no point
-  // walking through a quiz that can't load — fail fast so the queue retries.
-  await page.waitForURL(/\/learn\/[^/]+\/home\/welcome/, { timeout: 30000 }).catch(() => {});
+  // course. Verify it actually took without bouncing away from a page that has
+  // already opened; if enrollment never completes there is no point walking
+  // through a quiz that can't load — fail fast so the queue retries.
+  if (!/\/learn\//.test(page.url())) {
+    await page.waitForURL(/\/learn\//, { timeout: 30000 }).catch(() => {});
+  }
   await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
   log(`after enrollment, URL: ${page.url()}`);
   if (!(await ensureEnrolled())) {
     await observer.capture("enrollment-failed");
     throw new Error("Enrollment did not complete: account stayed on the /projects/ landing page (every /learn/ URL bounced back).");
   }
+  // These starter controls unlock the guided-project items. Without them,
+  // Coursera can bounce direct supplement/lab URLs back to /home/module/1.
   await clickSel('input[type="checkbox"]', { optional: true, force: true, timeout: 8000 });
-  await clickRole("button", /start the guided project/i, { optional: true, timeout: 12000 });
-  await clickRole("button", /go to first item/i, { optional: true, timeout: 6000 });
-  await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
+  progressedClick = await clickRole("button", /start the guided project/i, { optional: true, timeout: 12000 });
+  await settleAfterClick(progressedClick, { timeout: 6000, urlPattern: /\/supplement\// });
+  if (extraButtonsEnabled() && !/\/supplement\//.test(page.url())) {
+    progressedClick = await clickRole("button", /go to first item/i, { optional: true, timeout: 6000 });
+    await settleAfterClick(progressedClick, { timeout: 4000, urlPattern: /\/supplement\// });
+  }
   log(`after start-project, URL: ${page.url()}`);
   await observer.capture("after-start-project");
 
@@ -973,47 +1342,53 @@ async function runAutomatedFlow(page, student, logPrefix = "") {
 
   // 4b) The ungraded lab: "Launch lab" opens a NEW TAB that redirects to .../lab, where an
   //     "Open" button spins up the lab environment (more tabs). We click Open, wait, then
-  //     close every tab except the main course tab and carry on.
+  //     close every tab except the main course tab and carry on. Set OPEN_LAB=n
+  //     to skip this slow external launch when you only want the faster quiz path.
   await recoverFromLandingAndRetry(`${LEARN_BASE}${LAB_PATH}`, "lab page");
-  await page.waitForTimeout(1000);
-  try {
-    const ctx = page.context();
-    const popupPromise = ctx.waitForEvent("page", { timeout: 20000 }).catch(() => null);
-    await clickAny(page, [
-      { role: "button", name: /launch lab|open lab|resume|launch app/i, label: "lab role button" },
-      { selector: 'button:has-text("Launch lab")', label: "Launch lab button" },
-      { selector: 'a:has-text("Launch lab")', label: "Launch lab link" },
-      { selector: '[data-testid*="launch"], [data-testid*="Launch"], [data-testid*="lab"], [data-testid*="Lab"]', label: "launch/lab test id" },
-      { selector: 'button:has-text("Open")', label: "Open button" },
-    ], { timeout: 25000, log });
-    log("clicked Launch lab");
-    let labTab = await popupPromise;
-    if (labTab) {
-      await labTab.waitForLoadState("domcontentloaded").catch(() => {});
-      // It redirects to the /lab page — give it a moment, then click "Open".
-      await labTab.waitForTimeout(1000);
-      const openBtn = labTab
-        .locator('button[aria-describedby="byob-mode-description"], button:has-text("Open")')
-        .filter({ visible: true })
-        .first();
-      await openBtn.click({ timeout: 15000 }).catch(() => log("(skip) lab Open button not found"));
-      log("clicked lab Open");
-      await labTab.waitForTimeout(1500);
-    } else {
-      log("(skip) lab tab did not open");
+  if (envFlag("OPEN_LAB", true)) {
+    await page.waitForTimeout(1000);
+    try {
+      const ctx = page.context();
+      const popupPromise = ctx.waitForEvent("page", { timeout: 20000 }).catch(() => null);
+      await clickAny(page, [
+        { role: "button", name: /launch lab|open lab|resume|launch app/i, label: "lab role button" },
+        { selector: 'button:has-text("Launch lab")', label: "Launch lab button" },
+        { selector: 'a:has-text("Launch lab")', label: "Launch lab link" },
+        { selector: '[data-testid*="launch"], [data-testid*="Launch"], [data-testid*="lab"], [data-testid*="Lab"]', label: "launch/lab test id" },
+        { selector: 'button:has-text("Open")', label: "Open button" },
+      ], { timeout: 25000, log });
+      log("clicked Launch lab");
+      let labTab = await popupPromise;
+      if (labTab) {
+        await labTab.waitForLoadState("domcontentloaded").catch(() => {});
+        // It redirects to the /lab page — give it a moment, then click "Open".
+        await labTab.waitForTimeout(1000);
+        const openBtn = labTab
+          .locator('button[aria-describedby="byob-mode-description"], button:has-text("Open")')
+          .filter({ visible: true })
+          .first();
+        await openBtn.click({ timeout: 15000 }).catch(() => log("(skip) lab Open button not found"));
+        log("clicked lab Open");
+        await labTab.waitForTimeout(1500);
+      } else {
+        log("(skip) lab tab did not open");
+      }
+      // Close every tab except the main course page.
+      for (const p of ctx.pages()) {
+        if (p !== page) await p.close().catch(() => {});
+      }
+      await page.bringToFront().catch(() => {});
+      log("closed lab tabs, back on main");
+    } catch (e) {
+      log(`(skip) lab step: ${e.message.split("\n")[0]}`);
+      await observer.capture("lab-step-skipped", e);
+      for (const p of page.context().pages()) {
+        if (p !== page) await p.close().catch(() => {});
+      }
     }
-    // Close every tab except the main course page.
-    for (const p of ctx.pages()) {
-      if (p !== page) await p.close().catch(() => {});
-    }
-    await page.bringToFront().catch(() => {});
-    log("closed lab tabs, back on main");
-  } catch (e) {
-    log(`(skip) lab step: ${e.message.split("\n")[0]}`);
-    await observer.capture("lab-step-skipped", e);
-    for (const p of page.context().pages()) {
-      if (p !== page) await p.close().catch(() => {});
-    }
+  } else {
+    await clickSel('button[data-testid="mark-complete"]', { optional: true, timeout: 5000 });
+    log("skipped external lab launch (set OPEN_LAB=y to enable)");
   }
 
   // 5) Open the graded assignment and start it
@@ -1300,22 +1675,68 @@ async function buildStudentFromClaim(claim) {
 }
 
 // Run the whole course flow for one student in Chromium, returning { cert, error }.
-async function runFlowWithFallbacks(browser, student, headless, logPrefix, profile = COURSERA_BROWSER_PROFILES[0]) {
+async function runFlowWithFallbacks(browser, student, headless, logPrefix, initialProfile = COURSERA_BROWSER_PROFILES[0]) {
   let cert = "";
   let error = "";
-  const context = await browser.newContext(courseraContextOptions({ profile }));
-  await applyCourseraNetworkProfile(context, profile);
-  await context.addInitScript(STEALTH_SCRIPT);
-  const page = await context.newPage();
-  try {
-    cert = await runAutomatedFlow(page, student, logPrefix);
-  } catch (err) {
-    error = err.message;
-    console.warn(`\n${logPrefix} [queue] Chromium flow stopped: ${err.message}`);
-  } finally {
-    await context.close().catch(() => {});
+  
+  const maxRetries = 3;
+  let attemptProfile = initialProfile;
+  
+  const browsecCountries = ["us", "gb", "nl", "sg"];
+  let currentCountryIdx = browsecCountries.indexOf(browsecCountry());
+  if (currentCountryIdx === -1) currentCountryIdx = 0;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    if (attempt > 1) {
+      console.log(`\n${logPrefix} [remediation] Attempt ${attempt - 1} was challenged/blocked. Triggering self-correction retry...`);
+      
+      // Reset successes and slow down subsequent actions
+      globalConsecutiveSuccesses = 0;
+      globalRemediationFactor = Math.min(3.0, globalRemediationFactor + 0.5);
+      
+      // Rotate Profile
+      const nextProfileIdx = (COURSERA_BROWSER_PROFILES.indexOf(attemptProfile) + 1) % COURSERA_BROWSER_PROFILES.length;
+      attemptProfile = COURSERA_BROWSER_PROFILES[nextProfileIdx];
+      console.log(`${logPrefix} [remediation] Rotating browser profile to: ${attemptProfile.name}`);
+      
+      // Cycle Browsec country if enabled
+      if (browsecEnabled()) {
+        currentCountryIdx = (currentCountryIdx + 1) % browsecCountries.length;
+        const newCountry = browsecCountries[currentCountryIdx];
+        process.env.BROWSEC_COUNTRY = newCountry;
+        console.log(`${logPrefix} [remediation] Cycling Browsec VPN country to: ${newCountry.toUpperCase()}`);
+      }
+      
+      // Cooldown wait before trying again
+      await sleep(6000);
+    }
+    
+    let context;
+    try {
+      context = await browser.newContext(courseraContextOptions({ profile: attemptProfile }));
+      await applyCourseraNetworkProfile(context, attemptProfile);
+      await context.addInitScript(STEALTH_SCRIPT);
+      const page = await context.newPage();
+      
+      cert = await runAutomatedFlow(page, student, logPrefix, attemptProfile);
+      if (cert) {
+        // Success: reward the reinforcement metrics
+        globalConsecutiveSuccesses++;
+        globalSuccessStreak = Math.max(globalSuccessStreak, globalConsecutiveSuccesses);
+        globalRemediationFactor = Math.max(1.0, globalRemediationFactor - 0.2);
+        break;
+      }
+    } catch (err) {
+      error = err.message;
+      console.warn(`\n${logPrefix} [queue] Attempt ${attempt} failed: ${err.message}`);
+    } finally {
+      if (context) {
+        await context.close().catch(() => {});
+      }
+    }
   }
-  return { cert: cert || "", error };
+  
+  return { cert: cert || "", error: cert ? "" : error };
 }
 
 async function runCoordinatorMode(config) {
@@ -1327,9 +1748,13 @@ async function runCoordinatorMode(config) {
   const hasDisplay = Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
   const headless = envHeadlessRaw ? /^(1|y|yes|true)$/i.test(envHeadlessRaw) : !hasDisplay;
 
-  const concurrency = Math.max(1,
+  let concurrency = Math.max(1,
     process.env.CONCURRENCY ? parseInt(process.env.CONCURRENCY, 10)
       : (config.CONCURRENCY !== undefined ? parseInt(config.CONCURRENCY, 10) : 1));
+  if (browsecEnabled() && concurrency !== 1) {
+    console.log("-> BROWSEC=y uses a persistent Chrome extension context; forcing CONCURRENCY=1.");
+    concurrency = 1;
+  }
   const heartbeatMs = Math.max(30, parseInt(process.env.HEARTBEAT_SEC || "180", 10)) * 1000;
 
   console.log("\n==================== DISTRIBUTED (QUEUE) MODE ====================");
@@ -1351,7 +1776,7 @@ async function runCoordinatorMode(config) {
   }
   if (stats && stats.counts) console.log(`-> Queue at start: ${JSON.stringify(stats.counts)}`);
 
-  const browser = await chromium.launch(chromiumLaunchOptions(headless));
+  const browser = await createBrowserController(headless);
   let processed = 0;
   let failedHere = 0;
 
@@ -1404,6 +1829,7 @@ async function runCoordinatorMode(config) {
       const profile = nextCourseraProfile();
       console.log(`${logPrefix} [queue:w${wid}] browser profile: ${profile.name} (cycles every ${PROFILE_BATCH_SIZE} students)`);
 
+      const studentStartTime = Date.now();
       let result = { cert: "", error: "" };
       try {
         result = await runFlowWithFallbacks(browser, student, headless, logPrefix, profile);
@@ -1412,6 +1838,8 @@ async function runCoordinatorMode(config) {
       } finally {
         clearInterval(hb);
       }
+
+      const duration = ((Date.now() - studentStartTime) / 1000).toFixed(1);
 
       if (result.cert) {
         try {
@@ -1424,14 +1852,35 @@ async function runCoordinatorMode(config) {
           email: student.email, password: student.password, certificate_url: result.cert,
         }).catch((e) => console.warn(`${logPrefix} report 'complete' failed: ${e.message}`));
         processed++;
-        console.log(`${logPrefix} [queue:w${wid}] DONE -> ${result.cert}`);
+        globalConsecutiveFailures = 0;
+        console.log(`${logPrefix} [queue:w${wid}] DONE -> ${result.cert} (Completed in ${duration} seconds)`);
       } else {
         await coordinatorRequest(coordinatorUrl, "fail", {
           pc: pcId, row: claim.row, student_id: claim.student_id,
           error: (result.error || "no certificate captured").slice(0, 300),
         }).catch((e) => console.warn(`${logPrefix} report 'fail' failed: ${e.message}`));
         failedHere++;
-        console.log(`${logPrefix} [queue:w${wid}] FAILED -> released for another PC to retry`);
+        globalConsecutiveFailures++;
+        console.log(`${logPrefix} [queue:w${wid}] FAILED -> released for another PC to retry (Failed in ${duration} seconds). Error: ${result.error || "no certificate captured"}`);
+        console.error(`[CRITICAL] Consecutive student failures: ${globalConsecutiveFailures}/5`);
+        if (globalConsecutiveFailures >= 5) {
+          if (!cooldownActive) {
+            cooldownActive = true;
+            console.error(`[CRITICAL] 5 consecutive student failures detected. Entering cooling-down sleep for 5 hours before automatically resuming queue processing...`);
+            for (let hr = 1; hr <= 5; hr++) {
+              await sleep(60 * 60 * 1000); // Wait 1 hour
+              console.log(`[Cooldown Update] ${hr}/5 hours elapsed...`);
+            }
+            globalConsecutiveFailures = 0;
+            cooldownActive = false;
+            console.log(`[INFO] Cool-down complete. Resuming queue processing...`);
+          } else {
+            // If another worker thread already triggered the cooldown, wait until it finishes
+            while (cooldownActive) {
+              await sleep(10000);
+            }
+          }
+        }
       }
     }
   };
@@ -1445,6 +1894,7 @@ async function runCoordinatorMode(config) {
 }
 
 async function main() {
+  await loadLearnedWeights().catch(() => {});
   // Read config.json for default parameters if it exists
   let config = {};
   try {
@@ -1457,8 +1907,28 @@ async function main() {
   // Let config.json bake in the browser channel (e.g. "chrome" for real Google
   // Chrome) the same way it does HEADLESS/COORDINATOR_URL. Env still wins.
   if (config.CHANNEL && !process.env.CHANNEL) process.env.CHANNEL = config.CHANNEL;
-  // Same for SLOW_FACTOR (scale all waits up for slow/VPN links).
+  // Set VPN/VPM/BROWSEC from config.json
+  const configVpn = config.VPN !== undefined ? config.VPN : (config.VPM !== undefined ? config.VPM : config.BROWSEC);
+  if (configVpn !== undefined) {
+    if (!process.env.VPN) process.env.VPN = String(configVpn);
+    if (!process.env.VPM) process.env.VPM = String(configVpn);
+    if (!process.env.BROWSEC) process.env.BROWSEC = String(configVpn);
+  }
+  if (config.BROWSEC_COUNTRY && !process.env.BROWSEC_COUNTRY) {
+    process.env.BROWSEC_COUNTRY = config.BROWSEC_COUNTRY;
+  }
+  if (config.BROWSEC_EXTENSION_PATH && !process.env.BROWSEC_EXTENSION_PATH) {
+    process.env.BROWSEC_EXTENSION_PATH = config.BROWSEC_EXTENSION_PATH;
+  }
+  // Set SPEED/SLOW_FACTOR (scale all waits up for slow/VPN links).
+  if (config.SPEED && !process.env.SPEED) process.env.SPEED = String(config.SPEED);
   if (config.SLOW_FACTOR && !process.env.SLOW_FACTOR) process.env.SLOW_FACTOR = String(config.SLOW_FACTOR);
+  // Optional slow-path Coursera buttons. Default is the original safer behavior.
+  // Set EXTRA=n to skip duplicate safety clicks. Set OPEN_LAB=n separately to
+  // skip the external lab launch.
+  if (Object.hasOwn(config, "EXTRA") && !process.env.EXTRA) process.env.EXTRA = String(config.EXTRA);
+  if (Object.hasOwn(config, "EXTRA_BUTTONS") && !process.env.EXTRA_BUTTONS) process.env.EXTRA_BUTTONS = String(config.EXTRA_BUTTONS);
+  if (Object.hasOwn(config, "OPEN_LAB") && !process.env.OPEN_LAB) process.env.OPEN_LAB = String(config.OPEN_LAB);
 
   // --- Distributed (queue) mode ---
   // If a coordinator URL is configured, this PC pulls students from the shared
@@ -1627,20 +2097,25 @@ async function main() {
     }
   }
 
-  const browser = await chromium.launch(chromiumLaunchOptions(headless));
+  const browser = await createBrowserController(headless);
 
   let recordingDone = false;
   try {
     if (mode === "auto") {
       // Clamp configured concurrency to a sane range: at least 1, and never
       // more workers than there are students to process.
-      const requested = Number.isFinite(envConcurrency) ? envConcurrency : 1;
+      let requested = Number.isFinite(envConcurrency) ? envConcurrency : 1;
+      if (browsecEnabled() && requested !== 1) {
+        console.log("-> BROWSEC=y uses a persistent Chrome extension context; forcing CONCURRENCY=1.");
+        requested = 1;
+      }
       const concurrency = Math.max(1, Math.min(requested, runStudents.length));
       console.log(`-> Running in AUTO mode with CONCURRENCY=${concurrency}`);
 
       // Process a single student end-to-end. Errors are contained here so one
       // failure never aborts the other workers.
       const processStudent = async (student, index) => {
+        const studentStartTime = Date.now();
         if (useRandomCreds) {
           const randCreds = generateRandomCredentials();
           student.first_name = randCreds.first_name;
@@ -1668,17 +2143,41 @@ async function main() {
 
         let cert = "";
         try {
-          cert = await runAutomatedFlow(page, student, logPrefix);
+          cert = await runAutomatedFlow(page, student, logPrefix, profile);
         } catch (err) {
           console.warn(`\n${logPrefix} [AUTO] Chromium flow stopped: ${err.message}`);
         } finally {
           await context.close().catch(() => {});
         }
 
+        const duration = ((Date.now() - studentStartTime) / 1000).toFixed(1);
+
         student.certificate_url = cert || "";
-        console.log(student.certificate_url
-          ? `\n${logPrefix} Certificate captured: ${student.certificate_url}`
-          : `\n${logPrefix} Flow finished but no certificate URL was captured.`);
+        if (student.certificate_url) {
+          globalConsecutiveFailures = 0;
+          console.log(`\n${logPrefix} Certificate captured: ${student.certificate_url} (Completed in ${duration} seconds)`);
+        } else {
+          globalConsecutiveFailures++;
+          console.log(`\n${logPrefix} Flow finished but no certificate URL was captured (Failed in ${duration} seconds).`);
+          console.error(`[CRITICAL] Consecutive student failures: ${globalConsecutiveFailures}/5`);
+          if (globalConsecutiveFailures >= 5) {
+            if (!cooldownActive) {
+              cooldownActive = true;
+              console.error(`[CRITICAL] 5 consecutive student failures detected. Entering cooling-down sleep for 5 hours before automatically resuming execution...`);
+              for (let hr = 1; hr <= 5; hr++) {
+                await sleep(60 * 60 * 1000); // Wait 1 hour
+                console.log(`[Cooldown Update] ${hr}/5 hours elapsed...`);
+              }
+              globalConsecutiveFailures = 0;
+              cooldownActive = false;
+              console.log(`[INFO] Cool-down complete. Resuming execution...`);
+            } else {
+              while (cooldownActive) {
+                await sleep(10000);
+              }
+            }
+          }
+        }
 
         try {
           if (student.certificate_url) {
@@ -2123,7 +2622,7 @@ async function main() {
         console.log("AUTO mode: self-driving the course with robust selectors...");
         let cert = "";
         try {
-          cert = await runAutomatedFlow(page, student);
+          cert = await runAutomatedFlow(page, student, "", null);
         } catch (err) {
           console.warn(`\n[AUTO] Chromium flow stopped: ${err.message}`);
         }

@@ -26,6 +26,8 @@ START = 1
 END = 100
 CONCURRENCY = 2      # how many browsers run in parallel
 HEADLESS = True      # True on a server/Colab; False to watch the browser
+VPN = "n"            # "y" to enable Browsec VPN extension, "n" to disable
+SPEED = 1            # Timeout multiplier: 2 means 2x slower actions (defaults to 2 automatically if VPN is enabled)
 # ==========================================================
 
 # Always operate from the directory this script lives in.
@@ -117,7 +119,7 @@ if not os.path.exists("students.csv"):
 
 # 6. Run --------------------------------------------------------------------
 print(f"\n=== Setup complete! Starting the runner "
-      f"(START={START}, END={END}, CONCURRENCY={CONCURRENCY}, HEADLESS={HEADLESS}) ===")
+      f"(START={START}, END={END}, CONCURRENCY={CONCURRENCY}, HEADLESS={HEADLESS}, VPN={VPN}, SPEED={SPEED}) ===")
 env = dict(os.environ, MODE="auto")
 env["START"] = str(START)
 if END is not None:
@@ -127,5 +129,7 @@ else:
 env["CONCURRENCY"] = str(CONCURRENCY)
 env["HEADLESS"] = "y" if HEADLESS else "n"
 env["COURSERA_COLAB"] = "1"
+env["VPN"] = str(VPN)
+env["SPEED"] = str(SPEED)
 if not run("node coursera_manual_runner.js", env=env):
     sys.exit("The runner exited with an error.")
