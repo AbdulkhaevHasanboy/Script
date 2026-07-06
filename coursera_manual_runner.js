@@ -60,13 +60,13 @@ function getPageStateKey(pageUrl, pageText = "", profileName = "default", vpnCou
   }
 }
 
-async function adaptiveEnrollDecision(page, log, TF = 1.0, profileName = "default", vpnCountry = "default") {
+async function adaptiveActionDecision(page, log, targetCheck, TF = 1.0, profileName = "default", vpnCountry = "default") {
   const currentUrl = page.url();
   const bodyText = await page.innerText("body").catch(() => "");
   const stateKey = getPageStateKey(currentUrl, bodyText, profileName, vpnCountry);
 
-  // Find all visible clickable elements
-  const buttonLocators = await page.locator('button, [role="button"], a.btn, a[href*="enroll"], input[type="button"], input[type="submit"]').all().catch(() => []);
+  // Find all visible clickable elements, including standard buttons, links, and Coursera-specific button classes
+  const buttonLocators = await page.locator('button, [role="button"], a.btn, a[href*="enroll"], a[href*="certificate"], a.cds-button, button.cds-button, input[type="button"], input[type="submit"]').all().catch(() => []);
   const visibleButtons = [];
 
   for (const loc of buttonLocators) {
@@ -84,17 +84,25 @@ async function adaptiveEnrollDecision(page, log, TF = 1.0, profileName = "defaul
       const text = rawText.trim().toLowerCase().replace(/\s+/g, " ");
       if (!text) continue;
 
+      // Hard-skip buttons that are never useful for course progression:
+      // • FAQ/accordion questions (end with "?")
+      // • Promotional / upsell CTAs
+      // • Reporting / feedback tools
+      // • Generic pagination/expand controls
+      if (
+        text.endsWith("?") ||
+        /^(report an issue|report issue|show \d+ more|learn more|read more|save now|save \d+% now|sounds great!|turn it off|how does this compare|what does the first week|will this help|is this the right level|what other options)$/i.test(text)
+      ) continue;
+
       if (!globalActionWeights[stateKey]) {
         globalActionWeights[stateKey] = {};
       }
       if (globalActionWeights[stateKey][text] === undefined) {
         // Bootstrap initial weights to guide early learning
         let initialWeight = 1.0;
-        if (/^(continue|go to course|start learning|go to first project|enroll for free)$/i.test(text)) {
+        if (/^(continue|go to course|start learning|go to first project|enroll for free|start|start assignment|view certificate|submit|yes|agree|i agree|accept|i accept|accept all cookies|mark complete|start the guided project|go to first item)$/i.test(text)) {
           initialWeight = 10.0;
-        } else if (/accept/i.test(text)) {
-          initialWeight = 5.0;
-        } else if (/close|cancel/i.test(text)) {
+        } else if (/close|cancel|reject/i.test(text)) {
           initialWeight = 0.5;
         }
         globalActionWeights[stateKey][text] = initialWeight;
@@ -133,10 +141,17 @@ async function adaptiveEnrollDecision(page, log, TF = 1.0, profileName = "defaul
   try {
     // Dynamic click timeout scaled by the slowdown TF factor to prevent false timing drops on slower VPNs
     await choice.locator.click({ timeout: Math.max(5000, 5000 * TF) });
-    await page.waitForLoadState("networkidle", { timeout: 2500 }).catch(() => {});
-    
+    // Wait for navigation to settle: first give the page a chance to start
+    // navigating (URL change), then wait for networkidle. Without this, a
+    // click like "continue" that triggers a redirect gets penalised because
+    // targetCheck() fires while the browser is still mid-navigation.
+    await page.waitForURL(url => url !== preUrl, { timeout: 4000 * TF }).catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 3000 * TF }).catch(() => {});
+
     const postUrl = page.url();
-    if (postUrl !== preUrl || postUrl.includes("/learn/")) {
+    const success = targetCheck ? await targetCheck() : (postUrl !== preUrl || postUrl.includes("/learn/"));
+    
+    if (success) {
       // Reward
       globalActionWeights[stateKey][choice.text] += 3.0;
       log(`[RL] Reward: +3.0 to "${choice.text}" in state [${stateKey}] (new weight: ${globalActionWeights[stateKey][choice.text].toFixed(1)})`);
@@ -145,7 +160,7 @@ async function adaptiveEnrollDecision(page, log, TF = 1.0, profileName = "defaul
     } else {
       // Penalize slightly
       globalActionWeights[stateKey][choice.text] -= 1.0;
-      log(`[RL] Penalty: -1.0 to "${choice.text}" (no state change, new weight: ${globalActionWeights[stateKey][choice.text].toFixed(1)})`);
+      log(`[RL] Penalty: -1.0 to "${choice.text}" (target check failed, new weight: ${globalActionWeights[stateKey][choice.text].toFixed(1)})`);
       await saveLearnedWeights().catch(() => {});
     }
   } catch (e) {
@@ -156,6 +171,10 @@ async function adaptiveEnrollDecision(page, log, TF = 1.0, profileName = "defaul
   }
   
   return true;
+}
+
+async function adaptiveEnrollDecision(page, log, TF = 1.0, profileName = "default", vpnCountry = "default") {
+  return await adaptiveActionDecision(page, log, null, TF, profileName, vpnCountry);
 }
 
 const COURSERA_BROWSER_PROFILES = [
@@ -519,7 +538,7 @@ const SURVEY_PATH = "/ungradedWidget/xJWEK/course-end-survey-we-appreciate-your-
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || "artifacts";
 const OBSERVE_VERBOSE = /^(1|y|yes|true)$/i.test(process.env.OBSERVE_VERBOSE || "");
 const CERT_ATTEMPTS = Number.parseInt(process.env.CERT_ATTEMPTS || "8", 10);
-const CERT_WAIT_MS = Number.parseInt(process.env.CERT_WAIT_MS || "10000", 10);
+const CERT_WAIT_MS = Number.parseInt(process.env.CERT_WAIT_MS || "5000", 10);
 const COLAB_RECOVERY = /^(1|y|yes|true)$/i.test(
   process.env.COURSERA_COLAB || process.env.COLAB_RECOVERY || process.env.GOOGLE_COLAB || "",
 );
@@ -716,7 +735,7 @@ async function findCertificateUrl(page) {
 function parseCsv(text) {
   const rows = [];
   let row = [];
-  let value = "";
+  let value = ""
   let quoted = false;
 
   for (let i = 0; i < text.length; i += 1) {
@@ -1306,7 +1325,7 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       if (clicked) {
         await settleAfterClick(clicked, { timeout: 6000, urlPattern: /\/learn\// });
       } else {
-        await page.waitForTimeout(2000 * TF);
+        await page.waitForTimeout(3000 * TF);
       }
     }
   }
@@ -1335,71 +1354,34 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   log(`after start-project, URL: ${page.url()}`);
   await observer.capture("after-start-project");
 
-  // 4) Mark the overview supplement complete
-  await recoverFromLandingAndRetry(`${LEARN_BASE}${SUPPLEMENT_PATH}`, "supplement page");
-  log(`supplement page URL: ${page.url()}`);
-  await clickSel('button[data-testid="mark-complete"]', { optional: true, timeout: 12000 });
-
-  // 4b) The ungraded lab: "Launch lab" opens a NEW TAB that redirects to .../lab, where an
-  //     "Open" button spins up the lab environment (more tabs). We click Open, wait, then
-  //     close every tab except the main course tab and carry on. Set OPEN_LAB=n
-  //     to skip this slow external launch when you only want the faster quiz path.
-  await recoverFromLandingAndRetry(`${LEARN_BASE}${LAB_PATH}`, "lab page");
-  if (envFlag("OPEN_LAB", true)) {
-    await page.waitForTimeout(1000);
-    try {
-      const ctx = page.context();
-      const popupPromise = ctx.waitForEvent("page", { timeout: 20000 }).catch(() => null);
-      await clickAny(page, [
-        { role: "button", name: /launch lab|open lab|resume|launch app/i, label: "lab role button" },
-        { selector: 'button:has-text("Launch lab")', label: "Launch lab button" },
-        { selector: 'a:has-text("Launch lab")', label: "Launch lab link" },
-        { selector: '[data-testid*="launch"], [data-testid*="Launch"], [data-testid*="lab"], [data-testid*="Lab"]', label: "launch/lab test id" },
-        { selector: 'button:has-text("Open")', label: "Open button" },
-      ], { timeout: 25000, log });
-      log("clicked Launch lab");
-      let labTab = await popupPromise;
-      if (labTab) {
-        await labTab.waitForLoadState("domcontentloaded").catch(() => {});
-        // It redirects to the /lab page — give it a moment, then click "Open".
-        await labTab.waitForTimeout(1000);
-        const openBtn = labTab
-          .locator('button[aria-describedby="byob-mode-description"], button:has-text("Open")')
-          .filter({ visible: true })
-          .first();
-        await openBtn.click({ timeout: 15000 }).catch(() => log("(skip) lab Open button not found"));
-        log("clicked lab Open");
-        await labTab.waitForTimeout(1500);
-      } else {
-        log("(skip) lab tab did not open");
-      }
-      // Close every tab except the main course page.
-      for (const p of ctx.pages()) {
-        if (p !== page) await p.close().catch(() => {});
-      }
-      await page.bringToFront().catch(() => {});
-      log("closed lab tabs, back on main");
-    } catch (e) {
-      log(`(skip) lab step: ${e.message.split("\n")[0]}`);
-      await observer.capture("lab-step-skipped", e);
-      for (const p of page.context().pages()) {
-        if (p !== page) await p.close().catch(() => {});
-      }
-    }
-  } else {
-    await clickSel('button[data-testid="mark-complete"]', { optional: true, timeout: 5000 });
-    log("skipped external lab launch (set OPEN_LAB=y to enable)");
-  }
-
-  // 5) Open the graded assignment and start it
+  // 5) Open the graded assignment and start it (supplement and lab are skipped for speed)
   await recoverFromLandingAndRetry(`${LEARN_BASE}${ASSIGNMENT_PATH}`, "assignment page");
   log(`assignment page URL: ${page.url()}`);
   // If the session was dropped, the assignment URL shows a login wall instead of
   // the quiz — re-authenticate and reload before trying to answer/submit.
   await ensureLoggedIn(`${LEARN_BASE}${ASSIGNMENT_PATH}`);
   await recoverFromLandingAndRetry(`${LEARN_BASE}${ASSIGNMENT_PATH}`, "assignment page after login");
-  await clickSel('button[data-testid="continue-button"]', { optional: true, timeout: 8000 });
-  await clickSel('button[data-testid="CoverPageActionButton"]', { optional: true, timeout: 10000 });
+
+  log("Starting assignment via adaptive RL decision loop...");
+  const assignDeadline = Date.now() + 30000 * TF;
+  // Exclude inputs/labels inside dialogs/modals (e.g. the "Report an Issue"
+  // modal has radio buttons that would otherwise fake a quiz-ready signal).
+  const isQuizLoaded = async () =>
+    (await page.locator('label, input[type="radio"], input[type="checkbox"]')
+      .filter({ visible: true })
+      .filter({ hasNot: page.locator('[role="dialog"], [role="alertdialog"], .rc-Modal, [data-testid*="modal"]') })
+      .count().catch(() => 0)) > 0;
+
+  while (Date.now() < assignDeadline && !(await isQuizLoaded())) {
+    const madeMove = await adaptiveActionDecision(page, log, isQuizLoaded, TF, profileName, vpnCountry);
+    if (!madeMove) {
+      log("No confident buttons found on assignment page, trying standard fallbacks...");
+      const clicked = await clickSel('button[data-testid="continue-button"], button[data-testid="CoverPageActionButton"]', { optional: true, timeout: 5000 });
+      if (!clicked) {
+        await page.waitForTimeout(3000 * TF);
+      }
+    }
+  }
   await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
 
   // 6) Select the correct options for the quiz based on correct answer texts
@@ -1452,7 +1434,6 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     }
   }
 
-
   // 7) Honor code + submit
   await fillSel('input[data-testid="honor-code-legal-name-input"]', FULL, { optional: true });
   // The submit button often sits below the fold and behind lazy-rendered content;
@@ -1467,17 +1448,28 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
   await observer.capture("after-quiz-submit");
 
-  // 7b) Complete the course-end survey item (a required item for 100% completion).
-  await recoverFromLandingAndRetry(`${LEARN_BASE}${SURVEY_PATH}`, "survey page");
-  await clickRole("button", /^continue$/i, { optional: true, timeout: 6000 });
-  await clickSel('button[data-testid="mark-complete"]', { optional: true, timeout: 10000 });
-
-  // 8) Verify name (required before the certificate is issued)
+  // 8) Verify name (required before the certificate is issued) - survey is skipped for speed
   await goto("https://www.coursera.org/user-verification?returnTo=%2Fmy-learning%3FmyLearningTab%3DCERTIFICATES");
   await fillSel("#first-name", student.first_name, { optional: true });
   await fillSel("#last-name", student.last_name, { optional: true });
   await clickSel("#check-acknowledge-age-base", { optional: true, force: true });
-  await clickRole("button", /^submit$/i, { optional: true, timeout: 10000 });
+  
+  log("Submitting name verification via adaptive RL decision loop...");
+  const nameDeadline = Date.now() + 20000 * TF;
+  const hasLeftVerification = async () => {
+    const url = page.url();
+    return !url.includes("user-verification");
+  };
+  while (Date.now() < nameDeadline && !(await hasLeftVerification())) {
+    const madeMove = await adaptiveActionDecision(page, log, hasLeftVerification, TF, profileName, vpnCountry);
+    if (!madeMove) {
+      log("No confident buttons found on name verification page, trying submit fallback...");
+      const clicked = await clickRole("button", /^submit$/i, { optional: true, timeout: 5000 });
+      if (!clicked) {
+        await page.waitForTimeout(3000 * TF);
+      }
+    }
+  }
   await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
   await observer.capture("after-name-verification");
 
@@ -1485,21 +1477,40 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   //    while to generate after the course hits 100%, so retry a few times.
   for (let attempt = 1; attempt <= CERT_ATTEMPTS; attempt++) {
     await goto("https://www.coursera.org/my-learning?myLearningTab=CERTIFICATES");
-    const directUrl = await findCertificateUrl(page);
+    let directUrl = await findCertificateUrl(page);
     if (directUrl) {
       log(`certificate link found on page: ${directUrl}`);
       return directUrl;
     }
-    const viewLink = page.getByRole("link", { name: /view certificate/i }).filter({ visible: true }).first();
-    if (await viewLink.count().catch(() => 0)) {
-      await viewLink.click({ timeout: 12000 }).catch(() => {});
-      await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
+
+    const certFound = async () => {
       const url = await findCertificateUrl(page);
-      if (url) {
-        log(`certificate page: ${url}`);
-        return url;
+      return !!url;
+    };
+
+    log(`Attempting to locate certificate page via adaptive RL (attempt ${attempt}/${CERT_ATTEMPTS})...`);
+    const madeMove = await adaptiveActionDecision(page, log, certFound, TF, profileName, vpnCountry);
+    if (madeMove) {
+      await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
+      directUrl = await findCertificateUrl(page);
+      if (directUrl) {
+        log(`certificate page: ${directUrl}`);
+        return directUrl;
+      }
+    } else {
+      // Fallback
+      const viewLink = page.getByRole("link", { name: /view certificate/i }).filter({ visible: true }).first();
+      if (await viewLink.count().catch(() => 0)) {
+        await viewLink.click({ timeout: 12000 }).catch(() => {});
+        await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
+        const url = await findCertificateUrl(page);
+        if (url) {
+          log(`certificate page (fallback): ${url}`);
+          return url;
+        }
       }
     }
+
     await observer.capture(`certificate-not-ready-${attempt}`);
     log(`certificate not ready yet (attempt ${attempt}/${CERT_ATTEMPTS}), waiting...`);
     await page.waitForTimeout(CERT_WAIT_MS);
