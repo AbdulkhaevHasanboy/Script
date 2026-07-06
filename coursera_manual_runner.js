@@ -82,16 +82,21 @@ async function adaptiveActionDecision(page, log, targetCheck, TF = 1.0, profileN
 
       const rawText = await loc.innerText().catch(() => "");
       const text = rawText.trim().toLowerCase().replace(/\s+/g, " ");
-      if (!text) continue;
+      const ariaLabel = (await loc.getAttribute("aria-label").catch(() => "") || "").trim().toLowerCase();
+      const title = (await loc.getAttribute("title").catch(() => "") || "").trim().toLowerCase();
+      if (!text && !ariaLabel) continue;
 
       // Hard-skip buttons that are never useful for course progression:
       // • FAQ/accordion questions (end with "?")
       // • Promotional / upsell CTAs
-      // • Reporting / feedback tools
+      // • Reporting / feedback tools (never press any button containing "report")
       // • Generic pagination/expand controls
       if (
         text.endsWith("?") ||
-        /^(report an issue|report issue|show \d+ more|learn more|read more|save now|save \d+% now|sounds great!|turn it off|how does this compare|what does the first week|will this help|is this the right level|what other options)$/i.test(text)
+        text.includes("report") ||
+        ariaLabel.includes("report") ||
+        title.includes("report") ||
+        /^(show \d+ more|learn more|read more|save now|save \d+% now|sounds great!|turn it off|how does this compare|what does the first week|will this help|is this the right level|what other options)$/i.test(text)
       ) continue;
 
       if (!globalActionWeights[stateKey]) {
@@ -139,6 +144,11 @@ async function adaptiveActionDecision(page, log, targetCheck, TF = 1.0, profileN
   const preUrl = page.url();
   
   try {
+    // Wait at least 1.5 seconds (plus small random jitter) before clicking to simulate human behavior
+    const waitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
+    log(`[RL] Waiting ${(waitTime / 1000).toFixed(2)}s before clicking "${choice.text}"...`);
+    await page.waitForTimeout(waitTime);
+
     // Dynamic click timeout scaled by the slowdown TF factor to prevent false timing drops on slower VPNs
     await choice.locator.click({ timeout: Math.max(5000, 5000 * TF) });
     // Wait for navigation to settle: first give the page a chance to start
@@ -1411,6 +1421,12 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       const count = await label.count();
       if (count > 0) {
         await label.scrollIntoViewIfNeeded({ timeout: 4000 });
+        
+        // Wait at least 1.5 seconds (plus small random jitter) before checking to simulate human behavior
+        const quizWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
+        log(`[Quiz] Waiting ${(quizWaitTime / 1000).toFixed(2)}s before selecting option "${pattern}"...`);
+        await page.waitForTimeout(quizWaitTime);
+
         const input = label.locator("input").first();
         if (await input.count() > 0) {
           await input.check({ timeout: 4000, force: true }).catch(async () => {
@@ -1423,6 +1439,11 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       } else {
         const fallback = page.locator("span, div, p").filter({ hasText: pattern }).first();
         if (await fallback.count() > 0) {
+          // Wait at least 1.5 seconds (plus small random jitter) before clicking fallback
+          const quizWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
+          log(`[Quiz] Waiting ${(quizWaitTime / 1000).toFixed(2)}s before selecting fallback option "${pattern}"...`);
+          await page.waitForTimeout(quizWaitTime);
+
           await fallback.click({ timeout: 4000, force: true });
           log(`Answered matching (fallback): ${pattern}`);
         } else {
@@ -1440,7 +1461,16 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   // scroll it into view first so the click isn't intercepted, then click.
   const submitBtn = page.locator('button[data-testid="submit-button"]').filter({ visible: true }).first();
   await submitBtn.scrollIntoViewIfNeeded({ timeout: 5000 * TF }).catch(() => {});
+  // Wait at least 1.5 seconds (plus small random jitter) before clicking submit
+  const submitWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
+  log(`[Quiz] Waiting ${(submitWaitTime / 1000).toFixed(2)}s before clicking submit button...`);
+  await page.waitForTimeout(submitWaitTime);
   await clickSel('button[data-testid="submit-button"]', { timeout: 10000 });
+
+  // Wait at least 1.5 seconds (plus small random jitter) before clicking the dialog submit confirmation
+  const dialogSubmitWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
+  log(`[Quiz] Waiting ${(dialogSubmitWaitTime / 1000).toFixed(2)}s before clicking dialog submit confirmation button...`);
+  await page.waitForTimeout(dialogSubmitWaitTime);
   await clickSel('button[data-testid="dialog-submit-button"]', { timeout: 12000 });
   // After confirming the quiz submit, stay on the page briefly so Coursera can
   // persist the submission state before we move to the next course item.
