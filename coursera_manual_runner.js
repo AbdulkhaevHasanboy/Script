@@ -61,70 +61,83 @@ function getPageStateKey(pageUrl, pageText = "", profileName = "default", vpnCou
 }
 
 async function adaptiveActionDecision(page, log, targetCheck, TF = 1.0, profileName = "default", vpnCountry = "default") {
-  const currentUrl = page.url();
-  const bodyText = await page.innerText("body").catch(() => "");
-  const stateKey = getPageStateKey(currentUrl, bodyText, profileName, vpnCountry);
+  let visibleButtons = [];
+  const startWait = Date.now();
+  const maxWait = 10000 * TF; // Wait up to 10 seconds (scaled by TF) for buttons to appear
 
-  // Find all visible clickable elements, including standard buttons, links, and Coursera-specific button classes
-  const buttonLocators = await page.locator('button, [role="button"], a.btn, a[href*="enroll"], a[href*="certificate"], a.cds-button, button.cds-button, input[type="button"], input[type="submit"]').all().catch(() => []);
-  const visibleButtons = [];
+  while (Date.now() - startWait < maxWait) {
+    const buttonLocators = await page.locator('button, [role="button"], a.btn, a[href*="enroll"], a[href*="certificate"], a.cds-button, button.cds-button, input[type="button"], input[type="submit"]').all().catch(() => []);
+    visibleButtons = [];
 
-  for (const loc of buttonLocators) {
-    try {
-      const isVisible = await loc.isVisible().catch(() => false);
-      if (!isVisible) continue;
+    for (const loc of buttonLocators) {
+      try {
+        const isVisible = await loc.isVisible().catch(() => false);
+        if (!isVisible) continue;
 
-      // Filter out buttons located in the global header or navigation elements
-      const inHeaderOrNav = await loc.evaluate(el => {
-        return !!el.closest('header, nav, [role="navigation"], [data-testid="header"]');
-      }).catch(() => false);
-      if (inHeaderOrNav) continue;
+        // Filter out buttons located in the global header or navigation elements
+        const inHeaderOrNav = await loc.evaluate(el => {
+          return !!el.closest('header, nav, [role="navigation"], [data-testid="header"]');
+        }).catch(() => false);
+        if (inHeaderOrNav) continue;
 
-      const rawText = await loc.innerText().catch(() => "");
-      const text = rawText.trim().toLowerCase().replace(/\s+/g, " ");
-      const ariaLabel = (await loc.getAttribute("aria-label").catch(() => "") || "").trim().toLowerCase();
-      const title = (await loc.getAttribute("title").catch(() => "") || "").trim().toLowerCase();
-      if (!text && !ariaLabel) continue;
+        const rawText = await loc.innerText().catch(() => "");
+        const text = rawText.trim().toLowerCase().replace(/\s+/g, " ");
+        const ariaLabel = (await loc.getAttribute("aria-label").catch(() => "") || "").trim().toLowerCase();
+        const title = (await loc.getAttribute("title").catch(() => "") || "").trim().toLowerCase();
+        if (!text && !ariaLabel) continue;
 
-      // Hard-skip buttons that are never useful for course progression:
-      // • FAQ/accordion questions (end with "?")
-      // • Promotional / upsell CTAs
-      // • Reporting / feedback tools (never press any button containing "report")
-      // • Generic pagination/expand controls
-      if (
-        text.endsWith("?") ||
-        text.includes("report") ||
-        ariaLabel.includes("report") ||
-        title.includes("report") ||
-        /^(show \d+ more|learn more|read more|save now|save \d+% now|sounds great!|turn it off|how does this compare|what does the first week|will this help|is this the right level|what other options)$/i.test(text)
-      ) continue;
+        // Hard-skip buttons that are never useful for course progression
+        if (
+          text.endsWith("?") ||
+          text.includes("report") ||
+          ariaLabel.includes("report") ||
+          title.includes("report") ||
+          /^(show \d+ more|learn more|read more|save now|save \d+% now|sounds great!|turn it off|how does this compare|what does the first week|will this help|is this the right level|what other options|set your goal|set a goal|in progress|in-progress|active|saved|archived)$/i.test(text)
+        ) continue;
 
-      if (!globalActionWeights[stateKey]) {
-        globalActionWeights[stateKey] = {};
+        visibleButtons.push({
+          locator: loc,
+          text,
+          rawText
+        });
+      } catch {
+        // ignore detached elements
       }
-      if (globalActionWeights[stateKey][text] === undefined) {
-        // Bootstrap initial weights to guide early learning
-        let initialWeight = 1.0;
-        if (/^(continue|go to course|start learning|go to first project|enroll for free|start|start assignment|view certificate|submit|yes|agree|i agree|accept|i accept|accept all cookies|mark complete|start the guided project|go to first item)$/i.test(text)) {
-          initialWeight = 10.0;
-        } else if (/close|cancel|reject/i.test(text)) {
-          initialWeight = 0.5;
-        }
-        globalActionWeights[stateKey][text] = initialWeight;
-      }
-
-      visibleButtons.push({
-        locator: loc,
-        text,
-        weight: globalActionWeights[stateKey][text]
-      });
-    } catch {
-      // ignore detached elements
     }
+
+    if (visibleButtons.length > 0) {
+      break;
+    }
+    await page.waitForTimeout(200);
   }
 
   if (visibleButtons.length === 0) {
     return false;
+  }
+
+  // Compute the state key once at least one button is visible
+  const currentUrl = page.url();
+  const bodyText = await page.innerText("body").catch(() => "");
+  const stateKey = getPageStateKey(currentUrl, bodyText, profileName, vpnCountry);
+
+  if (!globalActionWeights[stateKey]) {
+    globalActionWeights[stateKey] = {};
+  }
+
+  // Assign or bootstrap weights
+  for (const btn of visibleButtons) {
+    const text = btn.text;
+    if (globalActionWeights[stateKey][text] === undefined) {
+      // Bootstrap initial weights to guide early learning
+      let initialWeight = 1.0;
+      if (/^(continue|go to course|start learning|go to first project|enroll for free|start|start assignment|view certificate|submit|yes|agree|i agree|accept|i accept|accept all cookies|mark complete|start the guided project|go to first item|completed|certificates|download certificate|share certificate)$/i.test(text)) {
+        initialWeight = 10.0;
+      } else if (/close|cancel|reject/i.test(text)) {
+        initialWeight = 0.5;
+      }
+      globalActionWeights[stateKey][text] = initialWeight;
+    }
+    btn.weight = globalActionWeights[stateKey][text];
   }
 
   // Sort choices by learned weight descending
@@ -144,22 +157,38 @@ async function adaptiveActionDecision(page, log, targetCheck, TF = 1.0, profileN
   const preUrl = page.url();
   
   try {
-    // Wait at least 1.5 seconds (plus small random jitter) before clicking to simulate human behavior
-    const waitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
+    // Wait briefly (300ms to 800ms scaled by TF) to simulate human behavior and maintain stealth
+    const waitTime = Math.max(300, 300 * TF) + Math.floor(Math.random() * 500);
     log(`[RL] Waiting ${(waitTime / 1000).toFixed(2)}s before clicking "${choice.text}"...`);
     await page.waitForTimeout(waitTime);
 
     // Dynamic click timeout scaled by the slowdown TF factor to prevent false timing drops on slower VPNs
-    await choice.locator.click({ timeout: Math.max(5000, 5000 * TF) });
-    // Wait for navigation to settle: first give the page a chance to start
-    // navigating (URL change), then wait for networkidle. Without this, a
-    // click like "continue" that triggers a redirect gets penalised because
-    // targetCheck() fires while the browser is still mid-navigation.
+    try {
+      await choice.locator.click({ timeout: Math.max(5000, 5000 * TF) });
+    } catch (clickErr) {
+      log(`[RL] Normal click failed/timed out, attempting force click on "${choice.text}"...`);
+      await choice.locator.click({ force: true, timeout: Math.max(5000, 5000 * TF) });
+    }
+    
+    // Wait for navigation to settle
     await page.waitForURL(url => url !== preUrl, { timeout: 4000 * TF }).catch(() => {});
     await page.waitForLoadState("networkidle", { timeout: 3000 * TF }).catch(() => {});
 
     const postUrl = page.url();
-    const success = targetCheck ? await targetCheck() : (postUrl !== preUrl || postUrl.includes("/learn/"));
+    let success = false;
+    if (targetCheck) {
+      // Poll targetCheck for up to 3 seconds to allow page rendering to finish
+      const checkStart = Date.now();
+      while (Date.now() - checkStart < 3000 * TF) {
+        if (await targetCheck()) {
+          success = true;
+          break;
+        }
+        await page.waitForTimeout(200);
+      }
+    } else {
+      success = postUrl !== preUrl || postUrl.includes("/learn/");
+    }
     
     if (success) {
       // Reward
@@ -672,7 +701,7 @@ function createObserver(page, student) {
       const analysisPath = path.join(ARTIFACTS_DIR, `${base}.json`);
       const analysis = await analyzePage(page);
 
-      await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+      await page.screenshot({ path: screenshotPath }).catch(() => {});
       await fs.writeFile(analysisPath, JSON.stringify({
         label,
         capturedAt: new Date().toISOString(),
@@ -1108,7 +1137,7 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   // dismissed. Click Accept. Best-effort and tolerant of slow (VPN) loads: it
   // waits up to `timeout` for the banner to appear, retries a couple of times,
   // and never throws. No-op (fast) when there's no banner.
-  const acceptCookies = async ({ timeout = 8000 } = {}) => {
+  const acceptCookies = async ({ timeout = 2000 } = {}) => {
     const deadline = Date.now() + timeout * TF;
     do {
       // OneTrust's standard accept button id is the most reliable anchor; fall
@@ -1148,22 +1177,21 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   // (a) wait for the page to settle so the handler is wired up, and (b) prefer the
   // stable [data-e2e="enroll-button"] selector over fragile "Enroll for free" text.
   const clickEnroll = async ({ timeout = 20000, optional = false } = {}) => {
-    // Let React finish wiring the click handler so the real enroll XHR fires
-    // instead of the dumb GET-form fallback that doesn't actually enroll.
-    await page.waitForLoadState("networkidle", { timeout: 8000 * TF }).catch(() => {});
-    await page.waitForTimeout(1200 * TF);
     const bySelector = page
       .locator('[data-e2e="enroll-button"], button:has-text("Enroll for free")')
       .filter({ visible: true })
       .first();
-    if (await bySelector.count().catch(() => 0)) {
-      try {
-        await bySelector.click({ timeout: timeout * TF });
-        log('clicked enroll button');
-        return true;
-      } catch (e) { /* fall through to the text-based locator below */ }
+    try {
+      // Wait for the enroll button to appear in the DOM and be visible
+      await bySelector.waitFor({ state: "visible", timeout: 8000 * TF });
+      // Brief human-like settle to ensure hydration is complete (500ms)
+      await page.waitForTimeout(500);
+      await bySelector.click({ timeout: timeout * TF });
+      log('clicked enroll button');
+      return true;
+    } catch (e) {
+      return clickRole("button", /enroll for free/i, { optional, timeout });
     }
-    return clickRole("button", /enroll for free/i, { optional, timeout });
   };
 
   // After signup the "Enroll for free" click sometimes fires (URL gains
@@ -1264,7 +1292,7 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   // 1) Landing page -> Enroll for free
   await goto(COURSE_URL);
   await observer.capture("landing");
-  await acceptCookies();  // dismiss the cookie banner before it blocks anything
+  await acceptCookies({ timeout: 1500 });  // dismiss the cookie banner before it blocks anything
   await clickEnroll({ timeout: 25000 });
   // On slow (VPN) links the first click often registers but doesn't actually
   // open the sign-up form. In slow mode (SLOW_FACTOR >= 2) always give it a
@@ -1355,11 +1383,22 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   // These starter controls unlock the guided-project items. Without them,
   // Coursera can bounce direct supplement/lab URLs back to /home/module/1.
   await clickSel('input[type="checkbox"]', { optional: true, force: true, timeout: 8000 });
-  progressedClick = await clickRole("button", /start the guided project/i, { optional: true, timeout: 12000 });
-  await settleAfterClick(progressedClick, { timeout: 6000, urlPattern: /\/supplement\// });
-  if (extraButtonsEnabled() && !/\/supplement\//.test(page.url())) {
-    progressedClick = await clickRole("button", /go to first item/i, { optional: true, timeout: 6000 });
-    await settleAfterClick(progressedClick, { timeout: 4000, urlPattern: /\/supplement\// });
+
+  const startBtn = page.getByRole("button", { name: /start the guided project/i }).filter({ visible: true }).first();
+  const goFirstBtn = page.getByRole("button", { name: /go to first item/i }).filter({ visible: true }).first();
+
+  const chosenBtn = await Promise.race([
+    startBtn.waitFor({ state: "visible", timeout: 3000 * TF }).then(() => startBtn).catch(() => null),
+    goFirstBtn.waitFor({ state: "visible", timeout: 3000 * TF }).then(() => goFirstBtn).catch(() => null),
+  ]);
+
+  if (chosenBtn) {
+    const isStart = chosenBtn === startBtn;
+    await chosenBtn.click({ timeout: 5000 * TF }).catch(() => {});
+    log(`clicked button "/${isStart ? "start the guided project" : "go to first item"}/i"`);
+    await settleAfterClick(true, { timeout: 6000, urlPattern: /\/(supplement|item)\// });
+  } else {
+    log('(skip) buttons "/start the guided project/i" and "/go to first item/i" not found');
   }
   log(`after start-project, URL: ${page.url()}`);
   await observer.capture("after-start-project");
@@ -1369,8 +1408,10 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   log(`assignment page URL: ${page.url()}`);
   // If the session was dropped, the assignment URL shows a login wall instead of
   // the quiz — re-authenticate and reload before trying to answer/submit.
-  await ensureLoggedIn(`${LEARN_BASE}${ASSIGNMENT_PATH}`);
-  await recoverFromLandingAndRetry(`${LEARN_BASE}${ASSIGNMENT_PATH}`, "assignment page after login");
+  const didLogin = await ensureLoggedIn(`${LEARN_BASE}${ASSIGNMENT_PATH}`);
+  if (didLogin) {
+    await recoverFromLandingAndRetry(`${LEARN_BASE}${ASSIGNMENT_PATH}`, "assignment page after login");
+  }
 
   log("Starting assignment via adaptive RL decision loop...");
   const assignDeadline = Date.now() + 30000 * TF;
