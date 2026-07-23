@@ -1097,6 +1097,20 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       // Existing-account submit is "Login"; tolerate "Log in"/"Continue"/"Submit".
       await clickRole("button", /^(log ?in|continue|submit)$/i, { optional: true, timeout: 12000 });
       await page.waitForLoadState("networkidle", { timeout: 6000 * TF }).catch(() => {});
+
+      const bodyText = await page.innerText("body").catch(() => "");
+      const lowerBody = bodyText.toLowerCase();
+      if (lowerBody.includes("incorrect email or password") || 
+          lowerBody.includes("incorrect password") || 
+          lowerBody.includes("invalid password") ||
+          lowerBody.includes("password is too weak") ||
+          lowerBody.includes("password must be") ||
+          lowerBody.includes("choose a stronger password")) {
+        const err = new Error("FATAL_PASSWORD_ERROR: Incorrect or invalid password/credentials.");
+        err.isFatalPassword = true;
+        throw err;
+      }
+
       if (returnUrl) await goto(returnUrl);
       if (!(await isWalled())) {
         log(`re-login succeeded (attempt ${attempt})`);
@@ -1430,6 +1444,20 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   }
   await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
   log(`after sign-up, URL: ${page.url()}`);
+
+  const bodyTextAfterSignup = await page.innerText("body").catch(() => "");
+  const lowerBodyAfterSignup = bodyTextAfterSignup.toLowerCase();
+  if (lowerBodyAfterSignup.includes("incorrect email or password") || 
+      lowerBodyAfterSignup.includes("incorrect password") || 
+      lowerBodyAfterSignup.includes("invalid password") ||
+      lowerBodyAfterSignup.includes("password is too weak") ||
+      lowerBodyAfterSignup.includes("password must be") ||
+      lowerBodyAfterSignup.includes("choose a stronger password")) {
+    const err = new Error("FATAL_PASSWORD_ERROR: Incorrect or invalid password/credentials.");
+    err.isFatalPassword = true;
+    throw err;
+  }
+
   await observer.capture("after-signup");
 
   // OFF BY DEFAULT. The original working version never touched a Terms-of-Use
@@ -2097,6 +2125,10 @@ async function runFlowWithFallbacks(browser, student, headless, logPrefix, initi
     } catch (err) {
       error = err.message;
       console.warn(`\n${logPrefix} [queue] Attempt ${attempt} failed: ${err.message}`);
+      if (err.isFatalPassword) {
+        console.log(`${logPrefix} [queue] Fatal password/credential error detected. Aborting retries.`);
+        break;
+      }
     } finally {
       if (context) {
         await context.close().catch(() => {});
@@ -2218,9 +2250,11 @@ async function runCoordinatorMode(config) {
         globalConsecutiveFailures = 0;
         console.log(`${logPrefix} [queue:w${wid}] DONE -> ${result.cert} (Completed in ${duration} seconds)`);
       } else {
+        const isFatalPass = result.error && result.error.includes("FATAL_PASSWORD_ERROR");
         await coordinatorRequest(coordinatorUrl, "fail", {
           pc: pcId, row: claim.row, student_id: claim.student_id,
           error: (result.error || "no certificate captured").slice(0, 300),
+          fatal: isFatalPass,
         }).catch((e) => console.warn(`${logPrefix} report 'fail' failed: ${e.message}`));
         failedHere++;
         globalConsecutiveFailures++;
@@ -2258,6 +2292,46 @@ async function runCoordinatorMode(config) {
 
 async function main() {
   await loadLearnedWeights().catch(() => {});
+
+  let recordingData = null;
+  const recordingFilePath = "recorded_steps.json";
+  try {
+    const data = await fs.readFile(recordingFilePath, "utf8");
+    recordingData = JSON.parse(data);
+  } catch (e) {
+    // Ignore error if file doesn'\''t exist
+  }
+
+  if (process.env.COURSE_URL) {
+    COURSE_URL = process.env.COURSE_URL.trim();
+    const parsedUrl = new URL(COURSE_URL);
+    const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+    COURSE_SLUG = pathParts[pathParts.length - 1];
+    if (parsedUrl.pathname.includes("/projects/")) {
+      LEARN_BASE = `https://www.coursera.org/projects/${COURSE_SLUG}`;
+    } else {
+      LEARN_BASE = `https://www.coursera.org/learn/${COURSE_SLUG}`;
+    }
+    console.log(`-> Dynamically configured course from env COURSE_URL:`);
+    console.log(`   COURSE_URL:  ${COURSE_URL}`);
+    console.log(`   COURSE_SLUG: ${COURSE_SLUG}`);
+    console.log(`   LEARN_BASE:  ${LEARN_BASE}`);
+  } else if (recordingData && recordingData.course_url) {
+    COURSE_URL = recordingData.course_url;
+    const parsedUrl = new URL(COURSE_URL);
+    const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+    COURSE_SLUG = pathParts[pathParts.length - 1];
+    if (parsedUrl.pathname.includes("/projects/")) {
+      LEARN_BASE = `https://www.coursera.org/projects/${COURSE_SLUG}`;
+    } else {
+      LEARN_BASE = `https://www.coursera.org/learn/${COURSE_SLUG}`;
+    }
+    console.log(`-> Dynamically configured course from recorded_steps.json:`);
+    console.log(`   COURSE_URL:  ${COURSE_URL}`);
+    console.log(`   COURSE_SLUG: ${COURSE_SLUG}`);
+    console.log(`   LEARN_BASE:  ${LEARN_BASE}`);
+  }
+
   // Read config.json for default parameters if it exists
   let config = {};
   try {
@@ -2385,45 +2459,6 @@ async function main() {
   }
 
   let mode = "manual";
-  let recordingData = null;
-  const recordingFilePath = "recorded_steps.json";
-
-  try {
-    const data = await fs.readFile(recordingFilePath, "utf8");
-    recordingData = JSON.parse(data);
-  } catch (e) {
-    // Ignore error if file doesn't exist
-  }
-
-  if (process.env.COURSE_URL) {
-    COURSE_URL = process.env.COURSE_URL.trim();
-    const parsedUrl = new URL(COURSE_URL);
-    const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
-    COURSE_SLUG = pathParts[pathParts.length - 1];
-    if (parsedUrl.pathname.includes("/projects/")) {
-      LEARN_BASE = `https://www.coursera.org/projects/${COURSE_SLUG}`;
-    } else {
-      LEARN_BASE = `https://www.coursera.org/learn/${COURSE_SLUG}`;
-    }
-    console.log(`-> Dynamically configured course from env COURSE_URL:`);
-    console.log(`   COURSE_URL:  ${COURSE_URL}`);
-    console.log(`   COURSE_SLUG: ${COURSE_SLUG}`);
-    console.log(`   LEARN_BASE:  ${LEARN_BASE}`);
-  } else if (recordingData && recordingData.course_url) {
-    COURSE_URL = recordingData.course_url;
-    const parsedUrl = new URL(COURSE_URL);
-    const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
-    COURSE_SLUG = pathParts[pathParts.length - 1];
-    if (parsedUrl.pathname.includes("/projects/")) {
-      LEARN_BASE = `https://www.coursera.org/projects/${COURSE_SLUG}`;
-    } else {
-      LEARN_BASE = `https://www.coursera.org/learn/${COURSE_SLUG}`;
-    }
-    console.log(`-> Dynamically configured course from recorded_steps.json:`);
-    console.log(`   COURSE_URL:  ${COURSE_URL}`);
-    console.log(`   COURSE_SLUG: ${COURSE_SLUG}`);
-    console.log(`   LEARN_BASE:  ${LEARN_BASE}`);
-  }
 
   if (envMode) {
     mode = envMode;

@@ -33,7 +33,7 @@ var MAX_ATTEMPTS = 4;        // tries per round; after this many fails the stude
 // Students 1..PROCESS_FROM_STUDENT are owned by the OLD scripts (a different,
 // unconnected form). This queue must NEVER hand them out — claim skips them
 // entirely (pending AND failed). Only students after this position are processed.
-var PROCESS_FROM_STUDENT = 1000;
+var PROCESS_FROM_STUDENT = 0;
 // A student that has used up all MAX_ATTEMPTS and still has no certificate is not
 // abandoned: after this many minutes it becomes claimable again with a fresh round
 // of MAX_ATTEMPTS. Repeats until the student finally completes. ("retake them after
@@ -190,6 +190,9 @@ function _fail(req) {
   sh.getRange(row, COL.STATUS).setValue("failed");
   // clear lease so it is reclaimable, record finished_at + the error  (H..J)
   sh.getRange(row, COL.LEASE, 1, 3).setValues([["", Date.now(), String(req.error || "").slice(0, 500)]]);
+  if (req.fatal) {
+    sh.getRange(row, COL.ATTEMPTS).setValue(MAX_ATTEMPTS); // max out attempts to prevent retry
+  }
   SpreadsheetApp.flush();
   return { ok: true };
 }
