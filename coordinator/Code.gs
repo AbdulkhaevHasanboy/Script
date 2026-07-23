@@ -18,10 +18,10 @@
  * crash-safety for free: a dead PC's work is auto-reclaimed after LEASE_MINUTES.
  *
  * SHEET LAYOUT (sheet name in QUEUE_SHEET, header row 1):
- *   A student_id | B full_name | C status | D owner | E attempts | F claimed_at
- *   G lease_expires | H finished_at | I last_error | J email | K password
- *   L certificate_url
- * Seed it with just columns A (student_id) and B (full_name); the rest is
+ *   A student_id | B full_name | C invit_url | D status | E owner | F attempts
+ *   G claimed_at | H lease_expires | I finished_at | J last_error | K email
+ *   L password | M certificate_url
+ * Seed it with just columns A (student_id), B (full_name), and C (invit_url); the rest is
  * managed here. An empty status counts as "pending".
  */
 
@@ -43,8 +43,8 @@ var TOKEN = "";              // optional shared secret; "" = no auth. If set, th
                              // runner must send the same COORDINATOR_TOKEN.
 // Column indexes (1-based) — keep in sync with the layout above.
 var COL = {
-  ID: 1, NAME: 2, STATUS: 3, OWNER: 4, ATTEMPTS: 5, CLAIMED_AT: 6,
-  LEASE: 7, FINISHED_AT: 8, ERROR: 9, EMAIL: 10, PASSWORD: 11, CERT: 12,
+  ID: 1, NAME: 2, INVIT_URL: 3, STATUS: 4, OWNER: 5, ATTEMPTS: 6, CLAIMED_AT: 7,
+  LEASE: 8, FINISHED_AT: 9, ERROR: 10, EMAIL: 11, PASSWORD: 12, CERT: 13,
 };
 var LAST_COL = COL.CERT;
 // ------------------------------------------------------------------
@@ -100,7 +100,7 @@ function _claim(req) {
 
     var now = Date.now();
     // Read the decision columns (status..finished_at) for a fast scan. finished_at
-    // (H) is needed for the failed-retry cooldown below.
+    // (I) is needed for the failed-retry cooldown below.
     var meta = sh.getRange(2, COL.STATUS, n, COL.FINISHED_AT - COL.STATUS + 1).getValues();
     var pick = -1;
     var resetAttempts = false; // true when reclaiming a fully-failed student for a fresh round
@@ -111,10 +111,10 @@ function _claim(req) {
       // first data row (i = 0) is student #1.
       if ((i + 1) <= PROCESS_FROM_STUDENT) continue;
 
-      var status = String(meta[i][0] || "").toLowerCase();           // C
-      var attempts = Number(meta[i][COL.ATTEMPTS - COL.STATUS]) || 0; // E
-      var lease = Number(meta[i][COL.LEASE - COL.STATUS]) || 0;       // G
-      var finishedAt = Number(meta[i][COL.FINISHED_AT - COL.STATUS]) || 0; // H
+      var status = String(meta[i][0] || "").toLowerCase();           // D
+      var attempts = Number(meta[i][COL.ATTEMPTS - COL.STATUS]) || 0; // F
+      var lease = Number(meta[i][COL.LEASE - COL.STATUS]) || 0;       // H
+      var finishedAt = Number(meta[i][COL.FINISHED_AT - COL.STATUS]) || 0; // I
 
       if (status === "" || status === "pending") { pick = i; break; }
       if (status === "in-progress") {
@@ -144,18 +144,18 @@ function _claim(req) {
     }
 
     var row = pick + 2;
-    var idName = sh.getRange(row, COL.ID, 1, 2).getValues()[0];
+    var rowVals = sh.getRange(row, 1, 1, COL.EMAIL).getValues()[0];
     // Fresh round after the cooldown starts the attempt count over; otherwise continue
     // counting within the current round.
     var attempts = (resetAttempts ? 0 : (Number(meta[pick][COL.ATTEMPTS - COL.STATUS]) || 0)) + 1;
-    // status, owner, attempts, claimed_at, lease_expires  (C..G)
+    // status, owner, attempts, claimed_at, lease_expires  (D..H)
     sh.getRange(row, COL.STATUS, 1, 5).setValues([[
       "in-progress", pc, attempts, now, now + LEASE_MINUTES * 60000,
     ]]);
-    // clear finished_at + last_error from any previous attempt (H..I)
+    // clear finished_at + last_error from any previous attempt (I..J)
     sh.getRange(row, COL.FINISHED_AT, 1, 2).setValues([["", ""]]);
     SpreadsheetApp.flush();
-    return { student_id: idName[0], full_name: idName[1], row: row, attempt: attempts };
+    return { student_id: rowVals[0], full_name: rowVals[1], invit_url: rowVals[2], email: rowVals[10], row: row, attempt: attempts };
   } finally {
     lock.releaseLock();
   }
@@ -173,9 +173,9 @@ function _complete(req) {
   if (!row) return { ok: false, error: "row not found" };
   var sh = _sheet();
   sh.getRange(row, COL.STATUS).setValue("done");
-  // clear lease, set finished_at, clear error  (G..I)
+  // clear lease, set finished_at, clear error  (H..J)
   sh.getRange(row, COL.LEASE, 1, 3).setValues([["", Date.now(), ""]]);
-  // email, password, certificate_url  (J..L)
+  // email, password, certificate_url  (K..M)
   sh.getRange(row, COL.EMAIL, 1, 3).setValues([[
     req.email || "", req.password || "", req.certificate_url || "",
   ]]);
@@ -188,7 +188,7 @@ function _fail(req) {
   if (!row) return { ok: false, error: "row not found" };
   var sh = _sheet();
   sh.getRange(row, COL.STATUS).setValue("failed");
-  // clear lease so it is reclaimable, record finished_at + the error  (G..I)
+  // clear lease so it is reclaimable, record finished_at + the error  (H..J)
   sh.getRange(row, COL.LEASE, 1, 3).setValues([["", Date.now(), String(req.error || "").slice(0, 500)]]);
   SpreadsheetApp.flush();
   return { ok: true };
@@ -241,12 +241,12 @@ function _json(obj) {
  * any email/password/certificate values. Safe to re-run.
  *
  * If you imported a seed that already includes the status column, you can skip
- * this entirely — it's only needed when you seeded just student_id + full_name.
+ * this entirely — it's only needed when you seeded just student_id + full_name + invit_url.
  */
 function initQueue() {
   var sh = _sheet();
   sh.getRange(1, 1, 1, LAST_COL).setValues([[
-    "student_id", "full_name", "status", "owner", "attempts", "claimed_at",
+    "student_id", "full_name", "invit_url", "status", "owner", "attempts", "claimed_at",
     "lease_expires", "finished_at", "last_error", "email", "password", "certificate_url",
   ]]);
   var n = sh.getLastRow() - 1;

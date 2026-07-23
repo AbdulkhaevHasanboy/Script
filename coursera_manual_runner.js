@@ -12,7 +12,9 @@ const stealth = require("puppeteer-extra-plugin-stealth")();
 chromium.use(stealth);
 
 const CSV_FILE = "students.csv";
-const COURSE_URL = "https://www.coursera.org/projects/build-a-computer-vision-app-with-azure-cognitive-services";
+let COURSE_URL = process.env.COURSE_URL || "https://www.coursera.org/learn/introduction-to-generative-ai";
+let COURSE_SLUG = "introduction-to-generative-ai";
+let LEARN_BASE = `https://www.coursera.org/learn/${COURSE_SLUG}`;
 const BROWSEC_EXTENSION_ID = "omghfjlpggmjjaagoclmmobgdodcjboh";
 const DEFAULT_BROWSEC_EXTENSION_PATH = path.resolve(__dirname, "extensions", "browsec");
 
@@ -130,10 +132,12 @@ async function adaptiveActionDecision(page, log, targetCheck, TF = 1.0, profileN
     if (globalActionWeights[stateKey][text] === undefined) {
       // Bootstrap initial weights to guide early learning
       let initialWeight = 1.0;
-      if (/^(continue|go to course|start learning|go to first project|enroll for free|start|start assignment|view certificate|submit|yes|agree|i agree|accept|i accept|accept all cookies|mark complete|start the guided project|go to first item|completed|certificates|download certificate|share certificate)$/i.test(text)) {
+      if (/^(continue|go to course|start learning|go to first project|enroll for free|start|start assignment|resume assignment|view certificate|submit|yes|agree|i agree|accept|i accept|accept all cookies|mark complete|start the guided project|go to first item|completed|certificates|download certificate|share certificate)$/i.test(text)) {
         initialWeight = 10.0;
       } else if (/close|cancel|reject/i.test(text)) {
         initialWeight = 0.5;
+      } else if (/recovery email|back/i.test(text)) {
+        initialWeight = -10.0;
       }
       globalActionWeights[stateKey][text] = initialWeight;
     }
@@ -471,6 +475,30 @@ async function assertBrowsecExtensionReady() {
 }
 
 async function createBrowserController(headless) {
+  const cdpPort = process.env.CDP_PORT;
+  const cdpWsEndpoint = process.env.CDP_WS_ENDPOINT;
+  if (cdpWsEndpoint || cdpPort) {
+    const wsEndpoint = cdpWsEndpoint || `http://localhost:${cdpPort}`;
+    console.log(`-> Connecting to existing Chrome via ${cdpWsEndpoint ? "WS" : "CDP"}: ${wsEndpoint}...`);
+    const browser = cdpWsEndpoint
+      ? await chromium.connect({ wsEndpoint: cdpWsEndpoint })
+      : await chromium.connectOverCDP(wsEndpoint);
+    return {
+      async newContext(options) {
+        const contexts = browser.contexts();
+        if (contexts.length > 0) {
+          const ctx = contexts[0];
+          // Overwrite page closing behavior so the script does not close the user's active page/context
+          const originalClose = ctx.close.bind(ctx);
+          ctx.close = async () => {};
+          return ctx;
+        }
+        throw new Error("No active browser contexts found in the CDP browser.");
+      },
+      async close() {}
+    };
+  }
+
   if (!browsecEnabled()) {
     const browser = await chromium.launch(chromiumLaunchOptions(headless));
     return {
@@ -568,12 +596,12 @@ async function enableBrowsecVpn(context) {
 }
 
 // --- Course-specific constants for AUTO mode (derived from the recording) ---
-const COURSE_SLUG = "build-a-computer-vision-app-with-azure-cognitive-services";
-const LEARN_BASE = `https://www.coursera.org/learn/${COURSE_SLUG}`;
-const SUPPLEMENT_PATH = "/supplement/MhGNK/guided-project-overview";
-const ASSIGNMENT_PATH = "/assignment-submission/fEJPQ/assess-your-knowledge";
-const LAB_PATH = `/ungradedLab/Sr2cy/${COURSE_SLUG}`;
-const SURVEY_PATH = "/ungradedWidget/xJWEK/course-end-survey-we-appreciate-your-feedback";
+COURSE_SLUG = "introduction-to-generative-ai";
+LEARN_BASE = `https://www.coursera.org/learn/${COURSE_SLUG}`;
+const SUPPLEMENT_PATH = "/lecture/sEzxC/where-generative-ai-fits-in-the-ai-and-ml-landscape";
+const ASSIGNMENT_PATH = "/assignment-submission/UOf9n/quiz-1";
+const LAB_PATH = "";
+const SURVEY_PATH = "";
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || "artifacts";
 const OBSERVE_VERBOSE = /^(1|y|yes|true)$/i.test(process.env.OBSERVE_VERBOSE || "");
 const CERT_ATTEMPTS = Number.parseInt(process.env.CERT_ATTEMPTS || "8", 10);
@@ -831,12 +859,30 @@ async function loadStudentsFromExcelAndCSV(csvFile, excelFile) {
 
   let excelStudents = [];
   try {
-    const pythonCmd = `python3 -c 'import openpyxl, json; wb = openpyxl.load_workbook("${excelFile}", data_only=True); sheet = wb["Talabalar"]; students = []; [students.append({"student_id": str(sheet.cell(r, 1).value).strip(), "full_name": str(sheet.cell(r, 2).value).strip()}) for r in range(3, sheet.max_row + 1) if sheet.cell(r, 1).value and sheet.cell(r, 2).value]; print(json.dumps(students))'`;
+    const pythonCmd = `python3 -c '
+import openpyxl, json
+wb = openpyxl.load_workbook("${excelFile}", data_only=True)
+sheet = wb["Talabalar"]
+students = []
+for r in range(3, sheet.max_row + 1):
+    name = sheet.cell(r, 1).value
+    passport = sheet.cell(r, 2).value
+    invite = sheet.cell(r, 6).value
+    email = sheet.cell(r, 7).value
+    if name and passport:
+        students.append({
+            "student_id": str(passport).strip(),
+            "full_name": str(name).strip(),
+            "invite_url": str(invite).strip() if invite else "",
+            "email": str(email).strip() if email else ""
+        })
+print(json.dumps(students))
+'`;
     const jsonOutput = execSync(pythonCmd, { encoding: "utf8", maxBuffer: 50 * 1024 * 1024 });
     excelStudents = JSON.parse(jsonOutput);
   } catch (e) {
-    console.error("Error reading Excel file names.xlsx:", e.message);
-    throw new Error(`Failed to load names.xlsx: ${e.message}`);
+    console.error("Error reading Excel file Names.xlsx:", e.message);
+    throw new Error(`Failed to load Names.xlsx: ${e.message}`);
   }
 
   const csvMap = new Map();
@@ -852,13 +898,16 @@ async function loadStudentsFromExcelAndCSV(csvFile, excelFile) {
     const last_name = parts.slice(1).join(" ") || "";
 
     const existing = csvMap.get(es.student_id) || {};
+    const isRegistered = existing.registered === "true" || existing.registered === true;
     return {
       student_id: es.student_id,
       first_name: first_name,
       last_name: last_name,
-      email: existing.email || "",
+      email: isRegistered ? (existing.email || es.email || "") : (es.email || ""),
       certificate_url: existing.certificate_url || "",
       password: existing.password || "",
+      invite_url: es.invite_url || existing.invite_url || "",
+      registered: existing.registered || "false"
     };
   });
 
@@ -886,50 +935,7 @@ async function saveStudents(csvFile, headers, students) {
   await fs.writeFile(csvFile, `${lines.join("\n")}\n`, "utf8");
 }
 
-async function submitToGoogleForm(browser, fullName, email, password, certUrl, logPrefix = "", profile = COURSERA_BROWSER_PROFILES[0]) {
-  const prefix = logPrefix ? `${logPrefix} ` : "";
-  const log = (m) => console.log(`  ${prefix}[google-form] ${m}`);
 
-  let formUrl = "https://forms.gle/Jw4WsW1kao7f6WtC7";
-  try {
-    const configData = await fs.readFile("config.json", "utf8");
-    const config = JSON.parse(configData);
-    if (config.GOOGLE_FORM_URL) {
-      formUrl = config.GOOGLE_FORM_URL;
-    }
-  } catch (e) {}
-
-  const context = await browser.newContext(courseraContextOptions({ width: 1280, height: 800, locale: "uz-UZ", profile }));
-  await applyCourseraNetworkProfile(context, profile);
-  await context.addInitScript(STEALTH_SCRIPT);
-  const page = await context.newPage();
-  try {
-    log(`Submitting details for ${fullName} (${email})...`);
-    await page.goto(formUrl, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector("input[type=\"text\"], textarea", { timeout: 15000 });
-
-    const inputs = page.locator("input[type=\"text\"], textarea");
-    await inputs.nth(0).fill(fullName);
-    await inputs.nth(1).fill(email);
-    await inputs.nth(2).fill(password);
-    await inputs.nth(3).fill(certUrl);
-
-    const submitBtn = page.locator(`div[role="button"]:has-text("Yuborish"), button:has-text("Yuborish"), div[role="button"]:has-text("Submit"), button:has-text("Submit")`).first();
-    await submitBtn.click({ timeout: 10000 });
-
-    await page.waitForTimeout(4000);
-    const text = await page.evaluate(() => document.body.innerText);
-    if (text.includes("received") || text.includes("yozib olindi") || text.includes("recorded") || text.includes("tahrirlang")) {
-      log(`Successfully submitted to Google Form.`);
-    } else {
-      log(`Warning: Submission screen check did not match expected confirmation text. Page text: ${text.replace(/\\s+/g, " ").substring(0, 100)}`);
-    }
-  } catch (e) {
-    log(`Error submitting to Google Form: ${e.message}`);
-  } finally {
-    await context.close().catch(() => {});
-  }
-}
 
 function generateRandomCredentials() {
   const firstNames = [
@@ -960,10 +966,7 @@ function generateRandomCredentials() {
 }
 
 function makePassword(student) {
-  const clean = (s) => String(s || "").replace(/[^a-zA-Z0-9]/g, "");
-  const first = clean(student.first_name) || "User";
-  const last = clean(student.last_name) || "Student";
-  return `${first}${last}!${Math.floor(Math.random() * 900) + 100}`;
+  return "adu2026_x";
 }
 
 // Build a fresh, unique email from the student's real name so each run signs up a new
@@ -987,6 +990,8 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   const prefix = logPrefix ? `${logPrefix} ` : "";
   const log = (m) => console.log(`  ${prefix}[auto] ${m}`);
   const observer = createObserver(page, student);
+  const bypassInvite = /^(1|y|yes|true)$/i.test(process.env.BYPASS_INVITE || "");
+  const startUrl = (bypassInvite || !student.invite_url) ? COURSE_URL : student.invite_url;
 
   // Slow / VPN networks: SPEED or SLOW_FACTOR (>= 1) multiplies EVERY wait below so a step
   // doesn't fail just because a page or button took longer to arrive. Default 1
@@ -1244,10 +1249,16 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       }
 
       log(`${label} bounced/stayed on landing (attempt ${attempt}): ${page.url()} — reopening landing and enrolling`);
-      await goto(COURSE_URL);
+      await goto(startUrl);
       await acceptCookies({ timeout: 4000 });
       await clickEnroll({ optional: true, timeout: 12000 });
-      await clickRole("button", /^(enroll for free|continue|start|go to course|start learning)$/i, { optional: true, timeout: 8000 });
+      const confirmBtn = page.locator('button:has-text("Continue"), button:has-text("Enroll"), button:has-text("Go to course"), button:has-text("Start learning")').filter({ visible: true }).first();
+      if (await confirmBtn.count() > 0) {
+        log(`Clicking confirmation button: "${await confirmBtn.innerText().catch(() => "Continue")}"`);
+        await confirmBtn.click({ timeout: 15000 }).catch(() => {});
+      } else {
+        await clickRole("button", /^(enroll for free|continue|start|go to course|start learning)$/i, { optional: true, timeout: 10000 });
+      }
       await page.waitForURL(/\/learn\//, { timeout: 20000 * TF }).catch(() => {});
       await page.waitForLoadState("networkidle", { timeout: 3000 * TF }).catch(() => {});
     }
@@ -1273,7 +1284,7 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       }
       log(`not enrolled yet (attempt ${attempt}): url=${page.url()} enrollBtn=${enrollVisible} — clicking Enroll`);
       if (!isProjectLanding()) {
-        await goto(COURSE_URL);
+        await goto(startUrl);
       }
       await acceptCookies({ timeout: 4000 });
       // clickEnroll waits for hydration first so the real enroll XHR fires
@@ -1281,7 +1292,13 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       await clickEnroll({ optional: true, timeout: 10000 });
       // A confirmation dialog ("Enroll for free"/"Continue") sometimes follows the
       // first click; click it too, then wait for the redirect into the course.
-      await clickRole("button", /^(enroll for free|continue|start)$/i, { optional: true, timeout: 6000 });
+      const confirmBtn = page.locator('button:has-text("Continue"), button:has-text("Enroll"), button:has-text("Go to course"), button:has-text("Start learning")').filter({ visible: true }).first();
+      if (await confirmBtn.count() > 0) {
+        log(`Clicking confirmation button: "${await confirmBtn.innerText().catch(() => "Continue")}"`);
+        await confirmBtn.click({ timeout: 15000 }).catch(() => {});
+      } else {
+        await clickRole("button", /^(enroll for free|continue|start)$/i, { optional: true, timeout: 10000 });
+      }
       await page.waitForURL(/\/learn\//, { timeout: 20000 }).catch(() => {});
     }
     // Final verdict: on /learn/ and no enroll button left to click.
@@ -1289,28 +1306,127 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     return /\/learn\//.test(page.url()) && !stillEnroll;
   };
 
-  // 1) Landing page -> Enroll for free
-  await goto(COURSE_URL);
+  // 1) Landing page -> Wait 30 seconds -> Open Signup/Login dialog
+  await goto(startUrl);
   await observer.capture("landing");
   await acceptCookies({ timeout: 1500 });  // dismiss the cookie banner before it blocks anything
-  await clickEnroll({ timeout: 25000 });
-  // On slow (VPN) links the first click often registers but doesn't actually
-  // open the sign-up form. In slow mode (SLOW_FACTOR >= 2) always give it a
-  // second click after a short settle — optional, so it's a no-op/skip if the
-  // form already opened (the button is gone once the form is up).
-  if (extraButtonsEnabled() && TF >= 2) {
-    await page.waitForTimeout(1500 * TF);
-    await clickEnroll({ optional: true, timeout: 8000 });
+
+  // Fast check if password screen is visible within 4 seconds
+  log("Checking for direct password setup screen...");
+  const passwordInput = page.locator('input[type="password"], input[name="password"]').filter({ visible: true }).first();
+  let hasPasswordInput = false;
+  try {
+    await passwordInput.waitFor({ state: "visible", timeout: 4000 });
+    hasPasswordInput = true;
+  } catch {
+    hasPasswordInput = false;
   }
 
-  // 2) Sign-up form
-  await fillSel('input[name="email"]', student.email);
-  await clickRole("button", /^continue$/i);
-  await fillSel('input[name="name"]', FULL);
-  await fillSel('input[name="password"]', student.password);
-  await clickRole("button", /join for free/i);
-  if (extraButtonsEnabled()) {
-    await clickRole("button", /join for free/i, { optional: true, timeout: 1000 });
+  if (hasPasswordInput) {
+    log("Direct password entry screen detected instantly! Waiting 15 seconds for page to hydrate...");
+    await page.waitForTimeout(15000);
+    log("Setting password...");
+    await passwordInput.click();
+    await page.waitForTimeout(1000);
+    await passwordInput.focus();
+    await page.keyboard.type(student.password, { delay: 100 });
+    await page.waitForTimeout(1000);
+    const setBtn = page.locator('button:has-text("Set Password"), button:has-text("Create password"), button[type="submit"]').filter({ visible: true }).first();
+    if (await setBtn.count() > 0) {
+      await setBtn.click().catch(() => {});
+      log("Clicked Set/Create Password button");
+      await page.waitForTimeout(5000);
+    }
+    const contBtn = page.locator('button:has-text("Continue")').filter({ visible: true }).first();
+    if (await contBtn.count() > 0) {
+      await contBtn.click().catch(() => {});
+      log("Clicked Continue button");
+      await page.waitForTimeout(4000);
+    }
+    const skipForNowBtn = page.locator('button:has-text("Skip for now"), a:has-text("Skip for now")').filter({ visible: true }).first();
+    if (await skipForNowBtn.count() > 0) {
+      await skipForNowBtn.click().catch(() => {});
+      log("Clicked Skip for now button");
+      await page.waitForTimeout(4000);
+    }
+  } else {
+    log("Direct password setup not found immediately. Waiting 3 seconds for page to settle...");
+    await page.waitForTimeout(3000 * TF);
+    await observer.capture("after-wait");
+
+    // Double check if password entry became visible after the wait
+    const hasPasswordAfterWait = await passwordInput.count().catch(() => 0) > 0;
+    if (hasPasswordAfterWait) {
+      log("Direct password entry screen detected after wait! Waiting 5 seconds for page to hydrate...");
+      await page.waitForTimeout(5000);
+      log("Setting password...");
+      await passwordInput.click();
+      await page.waitForTimeout(1000);
+      await passwordInput.focus();
+      await page.keyboard.type(student.password, { delay: 100 });
+      await page.waitForTimeout(1000);
+      const setBtn = page.locator('button:has-text("Set Password"), button:has-text("Create password"), button[type="submit"]').filter({ visible: true }).first();
+      if (await setBtn.count() > 0) {
+        await setBtn.click().catch(() => {});
+        log("Clicked Set/Create Password button");
+        await page.waitForTimeout(5000);
+      }
+      const contBtn = page.locator('button:has-text("Continue")').filter({ visible: true }).first();
+      if (await contBtn.count() > 0) {
+        await contBtn.click().catch(() => {});
+        log("Clicked Continue button");
+        await page.waitForTimeout(4000);
+      }
+      const skipForNowBtn = page.locator('button:has-text("Skip for now"), a:has-text("Skip for now")').filter({ visible: true }).first();
+      if (await skipForNowBtn.count() > 0) {
+        await skipForNowBtn.click().catch(() => {});
+        log("Clicked Skip for now button");
+        await page.waitForTimeout(4000);
+      }
+    } else {
+      // Check if email input is already visible on the page
+      let hasEmailInput = await page.locator('input[name="email"]').filter({ visible: true }).count().catch(() => 0) > 0;
+      if (!hasEmailInput) {
+        log("Email input not visible; attempting to open Log In / Join dialog...");
+        const loginBtn = page.locator('a:has-text("Log In"), button:has-text("Log In"), [href*="authMode=login"]').filter({ visible: true }).first();
+        if (await loginBtn.count() > 0) {
+          await loginBtn.click({ timeout: 10000 }).catch(() => {});
+          log("Clicked Log In button");
+          await page.waitForTimeout(3000);
+        } else {
+          // Try clicking one of the course cards to trigger enrollment/login
+          const firstCourseCard = page.locator('a[href*="/learn/"]').filter({ visible: true }).first();
+          if (await firstCourseCard.count() > 0) {
+            await firstCourseCard.click({ timeout: 10000 }).catch(() => {});
+            log("Clicked first course card to trigger auth");
+            await page.waitForTimeout(3000);
+          }
+        }
+      }
+
+      // Toggle to Sign Up mode if we are currently in Log In mode, since we want to register
+      const signUpToggle = page.locator('button:has-text("Sign Up"), a:has-text("Sign Up")').filter({ visible: true }).first();
+      if (await signUpToggle.count() > 0) {
+        await signUpToggle.click({ timeout: 5000 }).catch(() => {});
+        log("Toggled dialog to Sign Up mode");
+        await page.waitForTimeout(2000);
+      }
+
+      // 2) Sign-up form
+      log("Filling sign-up credentials...");
+      await fillSel('input[name="email"]', student.email);
+
+      const continueBtn = page.locator('button').filter({ hasText: /^continue$/i }).filter({ visible: true });
+      if (await continueBtn.count() > 0) {
+        log("Continue button visible, clicking it...");
+        await continueBtn.first().click({ timeout: 5000 }).catch(() => {});
+        await page.waitForTimeout(1000);
+      }
+
+      await fillSel('input[name="name"]', FULL);
+      await fillSel('input[name="password"]', student.password);
+      await clickRole("button", /join for free/i);
+    }
   }
   await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
   log(`after sign-up, URL: ${page.url()}`);
@@ -1343,6 +1459,13 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     }
   }
 
+  // Navigate to COURSE_URL if we are not already on the course page
+  if (!page.url().includes("/learn/") && !page.url().includes("/projects/")) {
+    log(`Navigating to target course page: ${COURSE_URL}`);
+    await goto(COURSE_URL);
+    await page.waitForTimeout(5000);
+  }
+
   // 3) Finish enrollment: run adaptive decision loop until we land in the course (/learn/)
   const enrollDeadline = Date.now() + 50000 * TF;
   log("Entering adaptive reinforcement learning enrollment loop...");
@@ -1350,6 +1473,7 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   await acceptCookies({ timeout: 6000 });
   
   while (Date.now() < enrollDeadline && !(await isOnLearnCourse())) {
+    await dismissOverlays(page);
     // Fail fast if we get CAPTCHAd or blocked during this phase
     const bodyText = await page.innerText("body").catch(() => "");
     if (bodyText.includes("unexpected error") || bodyText.includes("Please solve this puzzle") || bodyText.includes("verify you are human")) {
@@ -1382,142 +1506,256 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   }
   // These starter controls unlock the guided-project items. Without them,
   // Coursera can bounce direct supplement/lab URLs back to /home/module/1.
-  await clickSel('input[type="checkbox"]', { optional: true, force: true, timeout: 8000 });
+  if (COURSE_SLUG !== "build-ai-apps-with-chatgpt-dalle-gpt4") {
+    await clickSel('input[type="checkbox"]', { optional: true, force: true, timeout: 8000 });
 
-  const startBtn = page.getByRole("button", { name: /start the guided project/i }).filter({ visible: true }).first();
-  const goFirstBtn = page.getByRole("button", { name: /go to first item/i }).filter({ visible: true }).first();
+    const startBtn = page.getByRole("button", { name: /start the guided project/i }).filter({ visible: true }).first();
+    const goFirstBtn = page.getByRole("button", { name: /go to first item/i }).filter({ visible: true }).first();
 
-  const chosenBtn = await Promise.race([
-    startBtn.waitFor({ state: "visible", timeout: 3000 * TF }).then(() => startBtn).catch(() => null),
-    goFirstBtn.waitFor({ state: "visible", timeout: 3000 * TF }).then(() => goFirstBtn).catch(() => null),
-  ]);
+    const chosenBtn = await Promise.race([
+      startBtn.waitFor({ state: "visible", timeout: 3000 * TF }).then(() => startBtn).catch(() => null),
+      goFirstBtn.waitFor({ state: "visible", timeout: 3000 * TF }).then(() => goFirstBtn).catch(() => null),
+    ]);
 
-  if (chosenBtn) {
-    const isStart = chosenBtn === startBtn;
-    await chosenBtn.click({ timeout: 5000 * TF }).catch(() => {});
-    log(`clicked button "/${isStart ? "start the guided project" : "go to first item"}/i"`);
-    await settleAfterClick(true, { timeout: 6000, urlPattern: /\/(supplement|item)\// });
+    if (chosenBtn) {
+      const isStart = chosenBtn === startBtn;
+      await chosenBtn.click({ timeout: 5000 * TF }).catch(() => {});
+      log(`clicked button "/${isStart ? "start the guided project" : "go to first item"}/i"`);
+      await settleAfterClick(true, { timeout: 6000, urlPattern: /\/(supplement|item)\// });
+    } else {
+      log('(skip) buttons "/start the guided project/i" and "/go to first item/i" not found');
+    }
+    log(`after start-project, URL: ${page.url()}`);
+    await observer.capture("after-start-project");
+  }
+
+  // 5) Open the graded assignments and complete them
+  let quizzes = [];
+  if (COURSE_SLUG === "build-ai-apps-with-chatgpt-dalle-gpt4") {
+    quizzes = [
+      {
+        name: "Quiz 1 (Test your AI Engineering Knowledge)",
+        path: "/assignment-submission/d5sEp/test-your-ai-engineering-knowledge",
+        answers: [
+          /GPT-3/i,
+          /Using specific and clear instructions in the prompt/i,
+          /openai\.api_key\s*=\s*['"]YOUR_API_KEY['"]/i,
+          /The simulation of human intelligence in machines/i,
+          /Implementing regular auditing and monitoring systems/i,
+          /DALL-E/i,
+          /It controls the randomness of the output/i,
+          /Create an OpenAI account/i,
+          /Using an API to send and receive data/i
+        ],
+        textInput: {
+          selector: 'input[id*="text-input"], input[placeholder*="answer"]',
+          value: "dall-e"
+        }
+      },
+      {
+        name: "Quiz 2 (Deploying your AI App Graded Assignment)",
+        path: "/assignment-submission/GEXT3/deploying-your-ai-app-graded-assignment",
+        answers: [
+          /POST/i,
+          /Cloudflare Pages/i,
+          /To limit the length of the generated response/i,
+          /Router/i,
+          /To handle serverless computing tasks/i,
+          /Implementing SSL\/TLS for data transmission/i,
+          /Access-Control-Allow-Origin/i,
+          /Using WebSockets to establish a persistent connection/i,
+          /Using the Fetch API/i,
+          /Try-catch blocks/i,
+          /To enhance website security, performance, and reliability/i,
+          /Git/i,
+          /To handle and serve requests for real-time data efficiently/i
+        ]
+      }
+    ];
   } else {
-    log('(skip) buttons "/start the guided project/i" and "/go to first item/i" not found');
+    quizzes = [
+      {
+        name: "Quiz 1",
+        path: "/assignment-submission/UOf9n/quiz-1",
+        answers: [
+          /Generative AI is a type of artificial intelligence \(AI\) that can create new content, such as text/i,
+          /Large language models are a subset of deep learning/i,
+          /A prompt is a short piece of text that is given to the large language model as input/i,
+          /supervised learning/i,
+          /unsupervised learning/i,
+          /discriminative model/i,
+          /generative model/i
+        ]
+      },
+      {
+        name: "Quiz 2",
+        path: "/assignment-submission/PbAYx/quiz-2",
+        answers: [
+          /A generative AI model could be trained on a dataset of images of cats and then used to generate new/i,
+          /A prompt is a short piece of text that is given to the large language model as input/i
+        ]
+      },
+      {
+        name: "Quiz 3",
+        path: "/assignment-submission/68izF/quiz-3",
+        answers: [
+          /A foundation model is a large AI model pretrained on a vast quantity of data that was "designed to b/i,
+          /A prompt is a short piece of text that is given to the large language model as input/i
+        ]
+      },
+      {
+        name: "Quiz 4",
+        path: "/assignment-submission/QR1K5/quiz-4",
+        answers: [
+          /The model is not trained on enough data/i,
+          /The model is not given enough context/i,
+          /The model is trained on noisy or dirty data/i,
+          /A prompt is a short piece of text that is given to the large language model as input/i
+        ]
+      }
+    ];
   }
-  log(`after start-project, URL: ${page.url()}`);
-  await observer.capture("after-start-project");
 
-  // 5) Open the graded assignment and start it (supplement and lab are skipped for speed)
-  await recoverFromLandingAndRetry(`${LEARN_BASE}${ASSIGNMENT_PATH}`, "assignment page");
-  log(`assignment page URL: ${page.url()}`);
-  // If the session was dropped, the assignment URL shows a login wall instead of
-  // the quiz — re-authenticate and reload before trying to answer/submit.
-  const didLogin = await ensureLoggedIn(`${LEARN_BASE}${ASSIGNMENT_PATH}`);
-  if (didLogin) {
-    await recoverFromLandingAndRetry(`${LEARN_BASE}${ASSIGNMENT_PATH}`, "assignment page after login");
-  }
+  const isQuizLoaded = async () => {
+    // If the commitment interstitial is visible, the quiz is not loaded yet
+    const commitVisible = await page.getByText(/commit to/i).first().count().catch(() => 0) > 0;
+    if (commitVisible) return false;
 
-  log("Starting assignment via adaptive RL decision loop...");
-  const assignDeadline = Date.now() + 30000 * TF;
-  // Exclude inputs/labels inside dialogs/modals (e.g. the "Report an Issue"
-  // modal has radio buttons that would otherwise fake a quiz-ready signal).
-  const isQuizLoaded = async () =>
-    (await page.locator('label, input[type="radio"], input[type="checkbox"]')
+    return (await page.locator('label, input[type="radio"], input[type="checkbox"]')
       .filter({ visible: true })
       .filter({ hasNot: page.locator('[role="dialog"], [role="alertdialog"], .rc-Modal, [data-testid*="modal"]') })
       .count().catch(() => 0)) > 0;
+  };
 
-  while (Date.now() < assignDeadline && !(await isQuizLoaded())) {
-    const madeMove = await adaptiveActionDecision(page, log, isQuizLoaded, TF, profileName, vpnCountry);
-    if (!madeMove) {
-      log("No confident buttons found on assignment page, trying standard fallbacks...");
-      const clicked = await clickSel('button[data-testid="continue-button"], button[data-testid="CoverPageActionButton"]', { optional: true, timeout: 5000 });
-      if (!clicked) {
-        await page.waitForTimeout(3000 * TF);
+  for (const quiz of quizzes) {
+    log(`[AUTO] Navigating to ${quiz.name}...`);
+    await recoverFromLandingAndRetry(`${LEARN_BASE}${quiz.path}`, `${quiz.name} page`);
+    log(`[AUTO] ${quiz.name} URL: ${page.url()}`);
+
+    const didLogin = await ensureLoggedIn(`${LEARN_BASE}${quiz.path}`);
+    if (didLogin) {
+      await recoverFromLandingAndRetry(`${LEARN_BASE}${quiz.path}`, `${quiz.name} page after login`);
+    }
+
+    log(`[AUTO] Starting ${quiz.name} via adaptive RL decision loop...`);
+    const assignDeadline = Date.now() + 30000 * TF;
+    while (Date.now() < assignDeadline && !(await isQuizLoaded())) {
+      await dismissOverlays(page);
+      const madeMove = await adaptiveActionDecision(page, log, isQuizLoaded, TF, profileName, vpnCountry);
+      if (!madeMove) {
+        log("No confident buttons found on assignment page, trying standard fallbacks...");
+        const clicked = await clickSel('button[data-testid="continue-button"], button[data-testid="CoverPageActionButton"]', { optional: true, timeout: 5000 });
+        if (!clicked) {
+          await page.waitForTimeout(3000 * TF);
+        }
       }
     }
-  }
-  await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
 
-  // 6) Select the correct options for the quiz based on correct answer texts
-  const answers = [
-    /12 months of free.*200\$/i,
-    /container that holds related resources/i,
-    /Standard Tier/i,
-    /Free tier/i,
-    /Two keys/i,
-    /^200$/i,
-    /JSON/i,
-    /OperationID/i,
-    /^C#$/i,
-    /^Java$/i,
-    /^ObjC$/i,
-    /^Python$/i
-  ];
+    log(`[AUTO] Answering ${quiz.name} questions...`);
+    await page.waitForSelector("label", { state: "visible", timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(500);
 
-  log("Waiting for quiz questions to load...");
-  await page.waitForSelector("label", { state: "visible", timeout: 15000 }).catch(() => {});
-  await page.waitForTimeout(500);
-
-  log("Answering quiz questions...");
-  for (const pattern of answers) {
-    try {
-      const label = page.locator("label").filter({ hasText: pattern }).first();
-      const count = await label.count();
-      if (count > 0) {
-        await label.scrollIntoViewIfNeeded({ timeout: 4000 });
-        
-        // Wait at least 1.5 seconds (plus small random jitter) before checking to simulate human behavior
-        const quizWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
-        log(`[Quiz] Waiting ${(quizWaitTime / 1000).toFixed(2)}s before selecting option "${pattern}"...`);
-        await page.waitForTimeout(quizWaitTime);
-
-        const input = label.locator("input").first();
-        if (await input.count() > 0) {
-          await input.check({ timeout: 4000, force: true }).catch(async () => {
-            await label.click({ timeout: 4000, force: true });
-          });
-        } else {
-          await label.click({ timeout: 4000, force: true });
+    for (const pattern of quiz.answers) {
+      try {
+        let label = page.locator("label").filter({ hasText: pattern }).first();
+        let count = await label.count();
+        if (count === 0) {
+          // Option not found: wait up to 5s extra for the text to appear
+          await page.waitForTimeout(2000);
+          count = await label.count();
+          if (count === 0) {
+            await page.waitForTimeout(3000);
+            count = await label.count();
+          }
         }
-        log(`Answered matching: ${pattern}`);
-      } else {
-        const fallback = page.locator("span, div, p").filter({ hasText: pattern }).first();
-        if (await fallback.count() > 0) {
-          // Wait at least 1.5 seconds (plus small random jitter) before clicking fallback
+        if (count > 0) {
+          await label.scrollIntoViewIfNeeded({ timeout: 4000 });
           const quizWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
-          log(`[Quiz] Waiting ${(quizWaitTime / 1000).toFixed(2)}s before selecting fallback option "${pattern}"...`);
+          log(`[Quiz] Waiting ${(quizWaitTime / 1000).toFixed(2)}s before selecting option "${pattern}"...`);
           await page.waitForTimeout(quizWaitTime);
 
-          await fallback.click({ timeout: 4000, force: true });
-          log(`Answered matching (fallback): ${pattern}`);
+          const input = label.locator("input").first();
+          if (await input.count() > 0) {
+            await input.check({ timeout: 4000, force: true }).catch(async () => {
+              await label.click({ timeout: 4000, force: true });
+            });
+          } else {
+            await label.click({ timeout: 4000, force: true });
+          }
+          log(`Answered matching: ${pattern}`);
         } else {
-          log(`Warning: Option matching ${pattern} not found`);
+          const fallback = page.locator("span, div, p").filter({ hasText: pattern }).first();
+          if (await fallback.count() > 0) {
+            const quizWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
+            log(`[Quiz] Waiting ${(quizWaitTime / 1000).toFixed(2)}s before selecting fallback option "${pattern}"...`);
+            await page.waitForTimeout(quizWaitTime);
+
+            await fallback.click({ timeout: 4000, force: true });
+            log(`Answered matching (fallback): ${pattern}`);
+          } else {
+            log(`Warning: Option matching ${pattern} not found`);
+          }
         }
+      } catch (e) {
+        log(`Error answering matching ${pattern}: ${e.message.split("\n")[0]}`);
       }
-    } catch (e) {
-      log(`Error answering matching ${pattern}: ${e.message.split("\n")[0]}`);
     }
+
+    if (quiz.textInput) {
+      try {
+        const inputLoc = page.locator(quiz.textInput.selector).first();
+        if (await inputLoc.count() > 0) {
+          log(`Filling text input answer: "${quiz.textInput.value}"`);
+          await inputLoc.fill(quiz.textInput.value);
+        }
+      } catch (e) {
+        log(`Error filling text input: ${e.message.split("\n")[0]}`);
+      }
+    }
+
+    // Submit honor code + submit button
+    await fillSel('input[data-testid="honor-code-legal-name-input"]', FULL, { optional: true });
+    const submitBtn = page.locator('button[data-testid="submit-button"]').filter({ visible: true }).first();
+    await submitBtn.scrollIntoViewIfNeeded({ timeout: 5000 * TF }).catch(() => {});
+    
+    const submitWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
+    log(`[Quiz] Waiting ${(submitWaitTime / 1000).toFixed(2)}s before clicking submit button...`);
+    await page.waitForTimeout(submitWaitTime);
+    await clickSel('button[data-testid="submit-button"]', { timeout: 10000 });
+
+    const dialogSubmitWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
+    log(`[Quiz] Waiting ${(dialogSubmitWaitTime / 1000).toFixed(2)}s before clicking dialog submit confirmation button...`);
+    await page.waitForTimeout(dialogSubmitWaitTime);
+    await clickSel('button[data-testid="dialog-submit-button"]', { timeout: 12000 });
+    
+    await page.waitForTimeout(4000 * TF);
+    await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
+    await observer.capture(`after-${quiz.name.toLowerCase().replace(" ", "-")}-submit`);
   }
 
-  // 7) Honor code + submit
-  await fillSel('input[data-testid="honor-code-legal-name-input"]', FULL, { optional: true });
-  // The submit button often sits below the fold and behind lazy-rendered content;
-  // scroll it into view first so the click isn't intercepted, then click.
-  const submitBtn = page.locator('button[data-testid="submit-button"]').filter({ visible: true }).first();
-  await submitBtn.scrollIntoViewIfNeeded({ timeout: 5000 * TF }).catch(() => {});
-  // Wait at least 1.5 seconds (plus small random jitter) before clicking submit
-  const submitWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
-  log(`[Quiz] Waiting ${(submitWaitTime / 1000).toFixed(2)}s before clicking submit button...`);
-  await page.waitForTimeout(submitWaitTime);
-  await clickSel('button[data-testid="submit-button"]', { timeout: 10000 });
-
-  // Wait at least 1.5 seconds (plus small random jitter) before clicking the dialog submit confirmation
-  const dialogSubmitWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
-  log(`[Quiz] Waiting ${(dialogSubmitWaitTime / 1000).toFixed(2)}s before clicking dialog submit confirmation button...`);
-  await page.waitForTimeout(dialogSubmitWaitTime);
-  await clickSel('button[data-testid="dialog-submit-button"]', { timeout: 12000 });
-  // After confirming the quiz submit, stay on the page briefly so Coursera can
-  // persist the submission state before we move to the next course item.
-  await page.waitForTimeout(4000 * TF);
-  await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
-  await observer.capture("after-quiz-submit");
+  // 7.5) Visit final reading supplement or congrats widget depending on course
+  if (COURSE_SLUG === "introduction-to-generative-ai") {
+    const finalReadingPath = "/supplement/vARuq/reading";
+    log(`[AUTO] Navigating to final reading supplement: ${LEARN_BASE}${finalReadingPath}`);
+    await recoverFromLandingAndRetry(`${LEARN_BASE}${finalReadingPath}`, "final reading supplement");
+    await page.waitForTimeout(5000);
+    
+    // Try to click "Mark Completed" or "Mark as Completed" button
+    const markBtn = page.locator('button:has-text("Mark Completed"), button:has-text("Mark as Completed")').filter({ visible: true }).first();
+    if (await markBtn.count() > 0) {
+      log("Clicking Mark Completed button on reading page...");
+      await markBtn.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(4000);
+    } else {
+      log("Mark Completed button not found on reading page (maybe already completed).");
+    }
+  } else if (COURSE_SLUG === "build-ai-apps-with-chatgpt-dalle-gpt4") {
+    const finalReadingPath = "/ungradedWidget/vbdMC/congrats-on-completing-the-course";
+    log(`[AUTO] Navigating to final congrats widget: ${LEARN_BASE}${finalReadingPath}`);
+    await recoverFromLandingAndRetry(`${LEARN_BASE}${finalReadingPath}`, "final congrats widget");
+    await page.waitForTimeout(5000);
+  }
 
   // 8) Verify name (required before the certificate is issued) - survey is skipped for speed
   await goto("https://www.coursera.org/user-verification?returnTo=%2Fmy-learning%3FmyLearningTab%3DCERTIFICATES");
@@ -1614,12 +1852,49 @@ async function dismissOverlays(page) {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
   }
+
+  // Skip / Skip for now / Remind me later interstitials
+  const skipBtn = page.locator('button, a, span').filter({ hasText: /^(skip|skip for now|remind me later|not now|no thanks|dismiss|cancel)$/i }).filter({ visible: true }).first();
+  if (await skipBtn.count() > 0) {
+    console.log(`  [Dismiss] Clicking skip button: "${await skipBtn.innerText().catch(() => "Skip")}"`);
+    await skipBtn.click({ force: true }).catch(() => {});
+    await page.waitForTimeout(1000);
+  }
+
   // Dismiss any generic modal overlay by pressing Escape
   const modal = page.locator('[role="dialog"]').first();
   if (await modal.count() > 0 && await modal.isVisible().catch(() => false)) {
     const closeBtn = modal.locator('button[aria-label="close"], button[aria-label="Close"], button.cds-closeButton').first();
     if (await closeBtn.count() > 0) {
       await closeBtn.click({ force: true }).catch(() => {});
+    }
+  }
+
+  // Handle "My commitment" / Onboarding interstitials on quiz entry
+  const commitCheckbox = page.locator('input[type="checkbox"]').first();
+  if (await commitCheckbox.count() > 0 && await commitCheckbox.isVisible().catch(() => false)) {
+    const isChecked = await commitCheckbox.isChecked().catch(() => false);
+    if (!isChecked) {
+      console.log("  [Dismiss] Commitment checkbox found, checking it...");
+      await commitCheckbox.check({ force: true }).catch(async () => {
+        await page.locator('label:has-text("commit"), span:has-text("commit")').first().click({ force: true }).catch(() => {});
+      });
+      await page.waitForTimeout(1000);
+    }
+    
+    // STRICTLY prioritize "Start the course" button for the commitment overlay!
+    const startCourseBtn = page.locator('button:has-text("Start the course")').filter({ visible: true }).first();
+    if (await startCourseBtn.count() > 0) {
+      console.log("  [Dismiss] Clicking commitment start course button...");
+      await startCourseBtn.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(2000);
+    } else {
+      const otherBtn = page.locator('button:has-text("Start assignment"), button:has-text("Continue")').filter({ visible: true }).first();
+      if (await otherBtn.count() > 0) {
+        console.log(`  [Dismiss] Clicking other start button: "${await otherBtn.innerText().catch(() => "Start")}"`);
+        await otherBtn.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(2000);
+      }
     }
   }
 }
@@ -1709,18 +1984,20 @@ async function findFullNameByStudentId(studentId) {
     }
   }
 
-  if (await fileExists("names.xlsx")) {
+  const excelFile = (await fileExists("Names.xlsx").then(() => "Names.xlsx").catch(() => null)) ||
+                    (await fileExists("names.xlsx").then(() => "names.xlsx").catch(() => null));
+  if (excelFile) {
     try {
       const script = [
         "import json, openpyxl, sys",
         "student_id = sys.argv[1]",
-        "wb = openpyxl.load_workbook('names.xlsx', data_only=True)",
+        `wb = openpyxl.load_workbook('${excelFile}', data_only=True)`,
         "sheet = wb['Talabalar']",
         "name = ''",
         "for r in range(3, sheet.max_row + 1):",
-        "    sid = sheet.cell(r, 1).value",
+        "    sid = sheet.cell(r, 2).value", // Passport is in column 2
         "    if sid and str(sid).strip() == student_id:",
-        "        name = str(sheet.cell(r, 2).value or '').strip()",
+        "        name = str(sheet.cell(r, 1).value or '').strip()", // Name is in column 1
         "        break",
         "print(json.dumps(name))",
       ].join("\n");
@@ -1750,8 +2027,17 @@ async function buildStudentFromClaim(claim) {
   const parts = fullName.split(/\s+/).filter(Boolean);
   const first = parts[0];
   const last = parts.slice(1).join(" ");
-  const student = { student_id: claim.student_id, first_name: first, last_name: last, email: "", password: "" };
-  student.email = makeFreshEmail(student);
+  const student = {
+    student_id: claim.student_id,
+    first_name: first,
+    last_name: last,
+    email: claim.email || "",
+    password: "",
+    invite_url: claim.invit_url || claim.invite_url || ""
+  };
+  if (!student.email) {
+    student.email = makeFreshEmail(student);
+  }
   student.password = makePassword(student);
   return student;
 }
@@ -1924,11 +2210,6 @@ async function runCoordinatorMode(config) {
       const duration = ((Date.now() - studentStartTime) / 1000).toFixed(1);
 
       if (result.cert) {
-        try {
-          await submitToGoogleForm(browser, fullName, student.email, student.password, result.cert, logPrefix, profile);
-        } catch (errForm) {
-          console.error(`${logPrefix} [queue] Google Form submission failed: ${errForm.message}`);
-        }
         await coordinatorRequest(coordinatorUrl, "complete", {
           pc: pcId, row: claim.row, student_id: claim.student_id,
           email: student.email, password: student.password, certificate_url: result.cert,
@@ -2016,7 +2297,9 @@ async function main() {
   // If a coordinator URL is configured, this PC pulls students from the shared
   // queue instead of a local range. This is the multi-PC path; it never touches
   // students.csv and needs no START/END.
-  if (process.env.COORDINATOR_URL || config.COORDINATOR_URL) {
+  const envModeCheck = process.env.MODE ? process.env.MODE.toLowerCase() : null;
+  const coordinatorUrl = process.env.COORDINATOR_URL !== undefined ? process.env.COORDINATOR_URL : config.COORDINATOR_URL;
+  if (coordinatorUrl && coordinatorUrl !== "none" && coordinatorUrl !== "" && envModeCheck !== "record" && envModeCheck !== "replay" && envModeCheck !== "manual") {
     await runCoordinatorMode(config);
     return;
   }
@@ -2031,7 +2314,7 @@ async function main() {
   const autoMode      = envMode === "replay" || envMode === "record" || envMode === "manual" || envMode === "auto" || envMode === "diagnose";
   const diagnoseMode  = envMode === "diagnose";
 
-  const rl = autoMode ? null : readline.createInterface({ input, output });
+  const rl = (autoMode || envMode) ? null : readline.createInterface({ input, output });
 
   async function ask(prompt, defaultVal) {
     if (autoMode || rl === null) return defaultVal;
@@ -2042,7 +2325,9 @@ async function main() {
   const envEnd = process.env.END ? parseInt(process.env.END, 10) : (config.END !== undefined ? parseInt(config.END, 10) : null);
   const envConcurrency = process.env.CONCURRENCY ? parseInt(process.env.CONCURRENCY, 10) : (config.CONCURRENCY !== undefined ? parseInt(config.CONCURRENCY, 10) : 3);
 
-  const excelFile = "names.xlsx";
+  const excelFile = (await fs.access("Names.xlsx").then(() => "Names.xlsx").catch(() => null)) ||
+                    (await fs.access("names.xlsx").then(() => "names.xlsx").catch(() => null)) ||
+                    "Names.xlsx";
   let excelExists = false;
   try {
     await fs.access(excelFile);
@@ -2050,7 +2335,7 @@ async function main() {
   } catch (e) {}
 
   let students = [];
-  let headers = ["student_id", "first_name", "last_name", "email", "certificate_url", "password"];
+  let headers = ["student_id", "first_name", "last_name", "email", "certificate_url", "password", "invite_url"];
 
   if (excelExists) {
     console.log(`-> Loading students from ${excelFile} and merging with ${CSV_FILE}...`);
@@ -2068,13 +2353,23 @@ async function main() {
   if (!headers.includes("certificate_url")) {
     headers.push("certificate_url");
   }
+  if (!headers.includes("invite_url")) {
+    headers.push("invite_url");
+  }
+  if (!headers.includes("registered")) {
+    headers.push("registered");
+  }
 
   const startIdx = Math.max(1, envStart);
   const endIdx = envEnd !== null ? Math.min(students.length, envEnd) : students.length;
   console.log(`-> Range selected: student ${startIdx} to ${endIdx} (out of ${students.length} total)`);
   const rangeStudents = students.slice(startIdx - 1, endIdx);
 
-  const pendingStudents = rangeStudents.filter((student) => !student.certificate_url?.trim());
+  const pendingStudents = rangeStudents.filter((student) => {
+    const hasCert = student.certificate_url?.trim();
+    const isRegistered = student.registered === "true" || student.registered === true;
+    return !hasCert && !isRegistered;
+  });
 
   // DIAGNOSE is a read-only probe of the public page — it should run even when every student
   // already has a certificate. Fall back to any student (or a synthetic one) just so the
@@ -2098,6 +2393,36 @@ async function main() {
     recordingData = JSON.parse(data);
   } catch (e) {
     // Ignore error if file doesn't exist
+  }
+
+  if (process.env.COURSE_URL) {
+    COURSE_URL = process.env.COURSE_URL.trim();
+    const parsedUrl = new URL(COURSE_URL);
+    const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+    COURSE_SLUG = pathParts[pathParts.length - 1];
+    if (parsedUrl.pathname.includes("/projects/")) {
+      LEARN_BASE = `https://www.coursera.org/projects/${COURSE_SLUG}`;
+    } else {
+      LEARN_BASE = `https://www.coursera.org/learn/${COURSE_SLUG}`;
+    }
+    console.log(`-> Dynamically configured course from env COURSE_URL:`);
+    console.log(`   COURSE_URL:  ${COURSE_URL}`);
+    console.log(`   COURSE_SLUG: ${COURSE_SLUG}`);
+    console.log(`   LEARN_BASE:  ${LEARN_BASE}`);
+  } else if (recordingData && recordingData.course_url) {
+    COURSE_URL = recordingData.course_url;
+    const parsedUrl = new URL(COURSE_URL);
+    const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+    COURSE_SLUG = pathParts[pathParts.length - 1];
+    if (parsedUrl.pathname.includes("/projects/")) {
+      LEARN_BASE = `https://www.coursera.org/projects/${COURSE_SLUG}`;
+    } else {
+      LEARN_BASE = `https://www.coursera.org/learn/${COURSE_SLUG}`;
+    }
+    console.log(`-> Dynamically configured course from recorded_steps.json:`);
+    console.log(`   COURSE_URL:  ${COURSE_URL}`);
+    console.log(`   COURSE_SLUG: ${COURSE_SLUG}`);
+    console.log(`   LEARN_BASE:  ${LEARN_BASE}`);
   }
 
   if (envMode) {
@@ -2154,13 +2479,13 @@ async function main() {
       useFreshEmail = false;
     } else if (envFreshEmail === "y" || envFreshEmail === "yes" || mode === "replay" || mode === "auto") {
       useFreshEmail = true;
-      console.log("-> Fresh-email mode: a unique email will be generated per student each run.");
+      console.log("-> Fresh-email mode: a unique email will be generated only for students who do not have a pre-allocated email in Names.xlsx or coordinator.");
     }
   }
 
   const hasDisplay = Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
   let headless = false;
-  if (envHeadless === "y" || envHeadless === "yes") {
+  if (envHeadless === "y" || envHeadless === "yes" || envHeadless === "true" || envHeadless === "1") {
     headless = true;
     console.log("-> Running in HEADLESS mode.");
   } else if (autoMode && !hasDisplay) {
@@ -2204,7 +2529,7 @@ async function main() {
           student.last_name = randCreds.last_name;
           student.email = randCreds.email;
           student.password = randCreds.password;
-        } else if (useFreshEmail) {
+        } else if (useFreshEmail && !student.email) {
           student.email = makeFreshEmail(student);
         }
 
@@ -2236,6 +2561,7 @@ async function main() {
 
         student.certificate_url = cert || "";
         if (student.certificate_url) {
+          student.registered = "true";
           globalConsecutiveFailures = 0;
           console.log(`\n${logPrefix} Certificate captured: ${student.certificate_url} (Completed in ${duration} seconds)`);
         } else {
@@ -2261,16 +2587,8 @@ async function main() {
           }
         }
 
-        try {
-          if (student.certificate_url) {
-            await submitToGoogleForm(browser, fullName, student.email, student.password, student.certificate_url, logPrefix, profile);
-          }
-        } catch (errForm) {
-          console.error(`\n${logPrefix} [AUTO] Google Form submission failed: ${errForm.message}`);
-        } finally {
-          await saveStudents(CSV_FILE, headers, students);
-          console.log(`${logPrefix} Saved results for ${fullName}. Certificate URL: ${student.certificate_url || "(none)"}`);
-        }
+        await saveStudents(CSV_FILE, headers, students);
+        console.log(`${logPrefix} Saved results for ${fullName}. Certificate URL: ${student.certificate_url || "(none)"}`);
       };
 
       // Worker pool: a shared cursor hands the next student to whichever worker
@@ -2296,7 +2614,7 @@ async function main() {
         student.last_name = randCreds.last_name;
         student.email = randCreds.email;
         student.password = randCreds.password;
-      } else if (useFreshEmail) {
+      } else if (useFreshEmail && !student.email) {
         // Keep the student's real name + password, but mint a brand-new unique email so the
         // sign-up flow doesn't collide with an account created on a previous run.
         student.email = makeFreshEmail(student);
@@ -2346,14 +2664,27 @@ async function main() {
         await fs.writeFile(recordingFilePath, JSON.stringify(data, null, 2), "utf8").catch(() => {});
       };
 
+      const pageMap = new Map();
+      let pageIdCounter = 0;
+
+      const getPageId = (p) => {
+        if (pageMap.has(p)) {
+          return pageMap.get(p);
+        }
+        pageIdCounter++;
+        const id = pageIdCounter;
+        pageMap.set(p, id);
+        return id;
+      };
+
       if (mode === "record") {
-        // Expose function and inject script for recording
-        await context.exposeFunction("recordPlaywrightEvent", (event) => {
+        // Expose binding context-wide
+        await context.exposeBinding("recordPlaywrightEvent", ({ page: sourcePage }, event) => {
+          const myPageId = getPageId(sourcePage);
+          event.pageId = myPageId;
           if (event.type === "fill") {
             const lastStep = recordedSteps[recordedSteps.length - 1];
-            if (lastStep && lastStep.type === "fill" && lastStep.selector === event.selector) {
-              // Coalesce consecutive keystrokes into one fill, but keep the latest time so
-              // the recorded wait reflects when typing actually finished.
+            if (lastStep && lastStep.type === "fill" && lastStep.selector === event.selector && lastStep.pageId === event.pageId) {
               lastStep.value = event.value;
               lastStep.url = event.url;
               lastStep.time = event.time;
@@ -2361,20 +2692,19 @@ async function main() {
               return;
             }
           }
-          // waitMs = real time you spent between the previous action and this one (for the very
-          // first step there's no prior action, so it's 0). Capped so an idle coffee break
-          // doesn't bake a 5-minute pause into replay.
           const prev = recordedSteps[recordedSteps.length - 1];
           const waitMs = prev && prev.time ? Math.min(event.time - prev.time, 20000) : 0;
           event.waitMs = waitMs;
           recordedSteps.push(event);
           console.log(
-            `[Record +${(waitMs / 1000).toFixed(1)}s] ${event.type.toUpperCase()}: ${event.selector}` +
-            `${event.text ? ` (${event.text})` : ""}${event.value !== undefined ? ` -> "${event.value}"` : ""}`
+            `[Record Page ${myPageId} +${(waitMs / 1000).toFixed(1)}s] ${event.type.toUpperCase()}: ${event.selector}` +
+            `${event.text ? ` (${event.text})` : ""}${event.value !== undefined ? ` -> "${event.value}"` : ""}` +
+            `${event.detail ? ` [detail: ${event.detail}]` : ""}`
           );
           persistRecording();
         });
 
+        // Add init script context-wide (applies to all current and future pages/tabs)
         await context.addInitScript(() => {
           if (window.__playwright_recorder_injected) return;
           window.__playwright_recorder_injected = true;
@@ -2423,33 +2753,114 @@ async function main() {
             "[role=\"button\"], [role=\"checkbox\"], [role=\"radio\"], [role=\"tab\"], " +
             "[role=\"menuitem\"], [role=\"option\"], [role=\"link\"]";
 
+          function getClosestClickable(el) {
+            let current = el;
+            while (current && current.tagName && current.tagName !== "BODY" && current.tagName !== "HTML") {
+              if (current.matches(INTERACTIVE)) {
+                return current;
+              }
+              try {
+                const style = window.getComputedStyle(current);
+                if (style && style.cursor === "pointer") {
+                  return current;
+                }
+              } catch (e) {}
+              current = current.parentElement;
+            }
+            return null;
+          }
+
+          function getElementDetails(el) {
+            const details = {};
+            if (!el) return details;
+            details.tagName = el.tagName.toLowerCase();
+            details.text = el.innerText ? el.innerText.trim() : "";
+            details.value = el.value !== undefined ? el.value : "";
+            const attrs = {};
+            if (el.attributes) {
+              for (let i = 0; i < el.attributes.length; i++) {
+                const attr = el.attributes[i];
+                attrs[attr.name] = attr.value;
+              }
+            }
+            details.attributes = attrs;
+            return details;
+          }
+
           document.addEventListener("click", (e) => {
             if (e.button !== 0) return;
             const target = e.target;
-            let element = target.closest(INTERACTIVE);
-            // Ignore clicks that don't land on a real interactive control — these are the
-            // "random places" (empty container divs) that produced junk nth-of-type selectors.
+
+            let isOption = false;
+            let optionEl = target.closest("option, [role='option'], [class*='option'], [id*='option']");
+            if (optionEl) {
+              isOption = true;
+            }
+
+            let element = getClosestClickable(target);
+            if (!element && isOption) {
+              element = optionEl;
+            }
             if (!element) return;
 
-            // A <label> click really toggles its associated control — record the control
-            // (stable name/id selector) instead of the label's fragile DOM path.
+            let isCheckboxOrRadio = false;
+            if (element.tagName === "INPUT" && (element.type === "checkbox" || element.type === "radio")) {
+              isCheckboxOrRadio = true;
+            }
+
             if (element.tagName === "LABEL") {
               const control = element.control ||
                 (element.htmlFor ? document.getElementById(element.htmlFor) : null) ||
                 element.querySelector("input, select, textarea");
-              if (control) element = control;
+              // If the label is for a checkbox or radio, we keep the LABEL as element so we record its text!
+              if (control && control.type !== "checkbox" && control.type !== "radio") {
+                element = control;
+              } else {
+                isCheckboxOrRadio = true;
+              }
+            } else if (isCheckboxOrRadio) {
+              // If they clicked the input directly, find its label to record the label instead
+              let label = element.closest("label");
+              if (!label && element.id) {
+                label = document.querySelector(`label[for="${element.id}"]`);
+              }
+              if (label) {
+                element = label;
+              }
             }
 
             const selector = getCssSelector(element);
             if (!selector) return;
-            const text = element.innerText ? element.innerText.trim().substring(0, 30) : "";
-            window.recordPlaywrightEvent({
-              type: "click",
-              selector,
-              text,
-              url: window.location.href,
-              time: Date.now()
-            });
+
+            let text = element.innerText ? element.innerText.trim().substring(0, 100) : "";
+            if (!text) {
+              text = element.getAttribute("aria-label") ||
+                     element.getAttribute("title") ||
+                     element.getAttribute("placeholder") ||
+                     (element.value !== undefined ? String(element.value) : "") ||
+                     "";
+              text = text.trim().substring(0, 100);
+            }
+
+            if (isOption || element.tagName === "SELECT" || element.role === "option" || isCheckboxOrRadio) {
+              window.recordPlaywrightEvent({
+                type: "chosed option details",
+                selector,
+                text,
+                detail: element.innerText ? element.innerText.trim() : text,
+                optionDetails: getElementDetails(element),
+                url: window.location.href,
+                time: Date.now()
+              });
+            } else {
+              window.recordPlaywrightEvent({
+                type: "click",
+                selector,
+                text,
+                url: window.location.href,
+                time: Date.now()
+              });
+            }
           }, true);
 
           const handleInput = (e) => {
@@ -2471,10 +2882,14 @@ async function main() {
             } else if (tagName === "SELECT") {
               const selector = getCssSelector(target);
               if (!selector) return;
+              const selectedOption = target.options[target.selectedIndex];
+              const selectedText = selectedOption ? selectedOption.text : "";
               window.recordPlaywrightEvent({
-                type: "select",
+                type: "chosed option details",
                 selector,
                 value: target.value,
+                detail: selectedText,
+                optionDetails: getElementDetails(selectedOption),
                 url: window.location.href,
                 time: Date.now()
               });
@@ -2487,8 +2902,69 @@ async function main() {
       }
 
       const page = await context.newPage();
-      console.log("Loading website: " + COURSE_URL);
-      const loaded = await safeGoto(page, COURSE_URL, { log: (m) => console.log("  " + m) });
+      if (mode === "record") {
+        const initialPageId = getPageId(page);
+        page.on("close", async () => {
+          const prev = recordedSteps[recordedSteps.length - 1];
+          const waitMs = prev && prev.time ? Math.min(Date.now() - prev.time, 20000) : 0;
+          recordedSteps.push({
+            type: "tab-close",
+            pageId: initialPageId,
+            waitMs,
+            time: Date.now()
+          });
+          console.log(`[Record] TAB-CLOSE: pageId ${initialPageId}`);
+          await persistRecording();
+        });
+
+        context.on("page", (newPage) => {
+          if (newPage.url().startsWith("chrome-extension://")) return;
+
+          const myPageId = getPageId(newPage);
+
+          const prev = recordedSteps[recordedSteps.length - 1];
+          const waitMs = prev && prev.time ? Math.min(Date.now() - prev.time, 20000) : 0;
+          
+          const stepObj = {
+            type: "tab-open",
+            pageId: myPageId,
+            url: newPage.url(),
+            waitMs,
+            time: Date.now()
+          };
+          recordedSteps.push(stepObj);
+          console.log(`[Record] TAB-OPEN: pageId ${myPageId}`);
+          persistRecording();
+
+          newPage.on("framenavigated", async (frame) => {
+            if (frame === newPage.mainFrame()) {
+              const url = newPage.url();
+              if (url && !url.startsWith("chrome-extension://") && url !== "about:blank") {
+                stepObj.url = url;
+                console.log(`[Record] Updated TAB-OPEN pageId ${myPageId} URL to: ${url}`);
+                await persistRecording();
+              }
+            }
+          });
+
+          newPage.on("close", async () => {
+            const prev = recordedSteps[recordedSteps.length - 1];
+            const waitMs = prev && prev.time ? Math.min(Date.now() - prev.time, 20000) : 0;
+            recordedSteps.push({
+              type: "tab-close",
+              pageId: myPageId,
+              waitMs,
+              time: Date.now()
+            });
+            console.log(`[Record] TAB-CLOSE: pageId ${myPageId}`);
+            await persistRecording();
+          });
+        });
+      }
+      const bypassInvite = /^(1|y|yes|true)$/i.test(process.env.BYPASS_INVITE || "");
+      const targetUrl = (bypassInvite || !student.invite_url) ? COURSE_URL : student.invite_url;
+      console.log("Loading website: " + targetUrl);
+      const loaded = await safeGoto(page, targetUrl, { log: (m) => console.log("  " + m) });
       if (!loaded) {
         console.warn("Initial navigation did not fully succeed; continuing with whatever loaded.");
       }
@@ -2536,8 +3012,91 @@ async function main() {
         console.log(`Starting automated playback of ${recordingData.steps.length} steps...`);
         const { recorded_student, steps } = recordingData;
 
+        const replayPages = {};
+        let replayPageCount = 0;
+
+        const registerReplayPage = (p) => {
+          if (!p || p.isClosed()) return;
+          const url = p.url() || "";
+          if (url.startsWith("chrome-extension://")) return;
+
+          replayPageCount++;
+          const myPageId = replayPageCount;
+          replayPages[myPageId] = p;
+          console.log(`  -> Registered pageId ${myPageId} for replay`);
+        };
+
+        // Register the initial page
+        registerReplayPage(page);
+
+        // Register any future pages/tabs opened under this context
+        context.on("page", (newPage) => {
+          registerReplayPage(newPage);
+        });
+
+        // Navigate to the first step URL if not already there (e.g. if we started on an invite URL)
+        const firstStep = steps[0];
+        if (firstStep && firstStep.url) {
+          const firstPath = (() => { try { return new URL(firstStep.url).pathname; } catch { return ""; } })();
+          const curPath = (() => { try { return new URL(page.url()).pathname; } catch { return ""; } })();
+          if (firstPath && firstPath !== curPath && !firstPath.includes("jwt_invite")) {
+            console.log(`  -> Replay startup: navigating to first step page ${firstPath}`);
+            await page.goto(firstStep.url, { waitUntil: "domcontentloaded" }).catch(() => {});
+            await page.waitForTimeout(3000);
+            await dismissOverlays(page);
+          }
+        }
+
         for (let i = 0; i < steps.length; i++) {
           const step = steps[i];
+          const stepPageId = step.pageId || 1;
+
+          let targetPage = replayPages[stepPageId];
+          if (!targetPage) {
+            // Wait up to 15 seconds for the tab to open
+            console.log(`  -> Waiting for pageId ${stepPageId} to open...`);
+            const startWait = Date.now();
+            while (!targetPage && Date.now() - startWait < 15000) {
+              await page.waitForTimeout(500);
+              targetPage = replayPages[stepPageId];
+            }
+          }
+
+          if (!targetPage) {
+            console.warn(`[Playback Interrupted] Page with pageId ${stepPageId} did not open in time.`);
+            console.log("Please take over manually.");
+            break;
+          }
+
+          // Bring the correct page/tab to front
+          await targetPage.bringToFront().catch(() => {});
+
+          if (step.type === "tab-open") {
+            console.log(`[Playback ${i + 1}/${steps.length}] TAB-OPEN on pageId ${stepPageId}`);
+            await targetPage.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+            await targetPage.waitForTimeout(1000);
+            continue;
+          }
+
+          if (step.type === "tab-close") {
+            console.log(`[Playback ${i + 1}/${steps.length}] TAB-CLOSE on pageId ${stepPageId}`);
+            await targetPage.close().catch(() => {});
+            continue;
+          }
+
+          // Skip redundant enrollment/program steps if we are already inside the course page
+          if (targetPage.url().includes("/learn/") && !targetPage.url().includes("/programs/") && step.url && step.url.includes("/programs/")) {
+            console.log(`[Playback ${i + 1}/${steps.length}] SKIPPING (already enrolled): ${step.type} on ${step.selector}`);
+            continue;
+          }
+
+          // Sanitize selector (escape colons in IDs)
+          if (step.selector && step.selector.includes("#") && step.selector.includes(":")) {
+            step.selector = step.selector.replace(/#([a-zA-Z0-9_-]+:[a-zA-Z0-9_:-]+)/g, '[id="$1"]');
+          }
+          if (step.selector && step.selector.includes("cds-react-aria")) {
+            step.selector = 'input[type="password"]';
+          }
           console.log(`[Playback ${i + 1}/${steps.length}] ${step.type.toUpperCase()} on ${step.selector}`);
 
           let resolvedValue = step.value;
@@ -2574,7 +3133,7 @@ async function main() {
           const nthCount = (step.selector.match(/nth-of-type/g) || []).length;
           const isContainerClick = step.type === "click" && nthCount >= 3 &&
             /^(html|body|div|section|form)/.test(step.selector.split(">").pop().trim());
-          const isOptionalStep = isContainerClick;
+          const isOptionalStep = isContainerClick || step.selector.includes("skip-recovery-email");
 
           try {
             // If this step's URL is different from the next step's URL, we may need to wait for navigation
@@ -2589,12 +3148,12 @@ async function main() {
             const navigablePage = /\/(learn|my-learning|account|user-verification)\b/.test(step.url || "");
             if (navigablePage) {
               const stepPath = (() => { try { return new URL(step.url).pathname; } catch { return ""; } })();
-              const curPath = (() => { try { return new URL(page.url()).pathname; } catch { return ""; } })();
+              const curPath = (() => { try { return new URL(targetPage.url()).pathname; } catch { return ""; } })();
               if (stepPath && stepPath !== curPath) {
                 console.log(`  -> Page-sync: navigating to recorded page ${stepPath}`);
-                await page.goto(step.url, { waitUntil: "domcontentloaded" }).catch(() => {});
-                await page.waitForTimeout(2500);
-                await dismissOverlays(page);
+                await targetPage.goto(step.url, { waitUntil: "domcontentloaded" }).catch(() => {});
+                await targetPage.waitForTimeout(2500);
+                await dismissOverlays(targetPage);
               }
             }
 
@@ -2613,22 +3172,28 @@ async function main() {
               ? 2000
               : Math.min(Math.max(recordedWait + 4000, isCheckbox ? 15000 : 8000), 30000);
             const tWait = Date.now();
-            await page.waitForSelector(step.selector, {
+            await targetPage.waitForSelector(step.selector, {
               state: isCheckbox ? "attached" : "visible",
               timeout: appearTimeout
             });
             console.log(`  -> Appeared after ${((Date.now() - tWait) / 1000).toFixed(1)}s (recorded wait ${(recordedWait / 1000).toFixed(1)}s)`);
 
             // Build the locator — if text is known, filter by it to avoid strict-mode violations
-            let locator = page.locator(step.selector);
+            let locator = targetPage.locator(step.selector);
 
             // For checkboxes: filter to visible ones only
             if (isCheckbox) {
-              const visibleCheckboxes = locator.filter({ visible: true });
+              let visibleCheckboxes = locator.filter({ visible: true });
+              if (step.text) {
+                const textFiltered = visibleCheckboxes.filter({ hasText: step.text });
+                if (await textFiltered.count() > 0) {
+                  visibleCheckboxes = textFiltered;
+                }
+              }
               const visCount = await visibleCheckboxes.count();
               if (visCount > 0) {
                 locator = visibleCheckboxes.first();
-                console.log(`  -> Using first visible checkbox (${visCount} visible)`);
+                console.log(`  -> Using first visible checkbox/radio matching criteria (${visCount} visible)`);
               } else {
                 locator = locator.first();
               }
@@ -2654,10 +3219,10 @@ async function main() {
             }
 
             // Dismiss any overlays that might intercept clicks
-            await dismissOverlays(page);
+            await dismissOverlays(targetPage);
 
             if (step.type === "click") {
-              const urlBefore = page.url();
+              const urlBefore = targetPage.url();
               try {
                 await locator.click({ timeout: 5000 });
               } catch (clickErr) {
@@ -2667,15 +3232,26 @@ async function main() {
               // If we expect a navigation, wait for URL to change or network to settle
               if (expectNavigation) {
                 await Promise.race([
-                  page.waitForURL(url => url.toString() !== urlBefore, { timeout: 10000 }).catch(() => {}),
-                  page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {})
+                  targetPage.waitForURL(url => url.toString() !== urlBefore, { timeout: 10000 }).catch(() => {}),
+                  targetPage.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {})
                 ]);
-                console.log(`  -> Navigated to: ${page.url()}`);
+                console.log(`  -> Navigated to: ${targetPage.url()}`);
               }
             } else if (step.type === "fill") {
               await locator.fill(resolvedValue);
             } else if (step.type === "select") {
               await locator.selectOption(resolvedValue);
+            } else if (step.type === "chosed option details") {
+              const tagName = await locator.evaluate(el => el.tagName.toUpperCase()).catch(() => "");
+              if (tagName === "SELECT") {
+                await locator.selectOption(resolvedValue);
+              } else {
+                try {
+                  await locator.click({ timeout: 5000 });
+                } catch (clickErr) {
+                  await locator.click({ force: true, timeout: 5000 });
+                }
+              }
             }
 
             // Brief settle. Fills and plain clicks barely need any pause; only steps that
@@ -2683,7 +3259,7 @@ async function main() {
             const settleMs = step.type === "fill"
               ? 120 + Math.random() * 120
               : (expectNavigation ? 500 + Math.random() * 300 : 200 + Math.random() * 200);
-            await page.waitForTimeout(settleMs);
+            await targetPage.waitForTimeout(settleMs);
           } catch (err) {
             // Optional/noise steps (accidental container clicks) should be skipped,
             // not treated as fatal — otherwise replay aborts on the first stray click.
@@ -2740,7 +3316,6 @@ async function main() {
         await new Promise((resolve) => {
           page.once("close", resolve);
           context.once("close", resolve);
-          browser.once("disconnected", resolve);
         });
 
         await persistRecording();
@@ -2756,7 +3331,7 @@ async function main() {
       }
 
       if (student.certificate_url) {
-        await submitToGoogleForm(browser, fullName, student.email, student.password, student.certificate_url, "", profile);
+        student.registered = "true";
       }
 
       await saveStudents(CSV_FILE, headers, students);

@@ -37,7 +37,7 @@ except ImportError:
 SHEET = "Talabalar"
 # Coordinator column order — must match coordinator/Code.gs.
 HEADER = [
-    "student_id", "full_name", "status", "owner", "attempts", "claimed_at",
+    "student_id", "full_name", "invit_url", "status", "owner", "attempts", "claimed_at",
     "lease_expires", "finished_at", "last_error", "email", "password", "certificate_url",
 ]
 
@@ -96,9 +96,18 @@ def load_roster(names_file):
     sheet = wb[SHEET]
     roster = []
     for r in range(3, sheet.max_row + 1):
-        sid, name = sheet.cell(r, 1).value, sheet.cell(r, 2).value
-        if sid and name:
-            roster.append((str(sid).strip(), str(name).strip()))
+        name = sheet.cell(r, 1).value
+        sid = sheet.cell(r, 2).value
+        invite_url = sheet.cell(r, 6).value
+        email = sheet.cell(r, 7).value
+        if not invite_url or not str(invite_url).strip():
+            continue
+        roster.append((
+            str(sid).strip() if sid else "",
+            str(name).strip() if name else "",
+            str(invite_url).strip(),
+            str(email).strip() if email else ""
+        ))
     return roster
 
 
@@ -125,19 +134,20 @@ def main():
     n_done = 0
     n_reserved = 0
     rows = []
-    for idx, (sid, name) in enumerate(roster, start=1):  # 1-based, matches START/END
+    for idx, (sid, name, invite_url, email) in enumerate(roster, start=1):  # 1-based, matches START/END
         d = done.get(norm(name))
         if d:
             # Already completed: keep it 'done' (with creds) wherever it is.
-            email, password, cert = d
-            rows.append([sid, name, "done", "", 1, "", "", "", "", email, password, cert])
+            done_email, password, cert = d
+            # Use the pre-allocated email if no done_email is found in done records
+            rows.append([sid, name, invite_url, "done", "", 1, "", "", "", "", done_email or email, password, cert])
             n_done += 1
         elif idx <= skip_first:
             # First N students belong to the old script — never claim them.
-            rows.append([sid, name, "reserved", "", 0, "", "", "", "", "", "", ""])
+            rows.append([sid, name, invite_url, "reserved", "", 0, "", "", "", "", email, "", ""])
             n_reserved += 1
         else:
-            rows.append([sid, name, "pending", "", 0, "", "", "", "", "", "", ""])
+            rows.append([sid, name, invite_url, "pending", "", 0, "", "", "", "", email, "", ""])
 
     with open(out_file, "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)

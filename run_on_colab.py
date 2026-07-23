@@ -21,13 +21,21 @@ import sys
 
 # ======================= EDIT THESE =======================
 # Which students to process (1-based, inclusive). Set END = None for "to the end".
-# These override START/END in config.json.
+# Only used when COORDINATOR_URL is "none".
 START = 1
 END = 100
-CONCURRENCY = 2      # how many browsers run in parallel
-HEADLESS = True      # True on a server/Colab; False to watch the browser
+CONCURRENCY = 1      # how many browsers run in parallel
+USE_XVFB = True      # Run headful inside virtual display (Xvfb) on Colab to bypass headless anti-bot blocks
 VPN = "n"            # "y" to enable Browsec VPN extension, "n" to disable
-SPEED = 1            # Timeout multiplier: 2 means 2x slower actions (defaults to 2 automatically if VPN is enabled)
+SPEED = 1            # Timeout multiplier (defaults to 2 automatically if VPN is enabled)
+
+# The course URL to solve
+COURSE_URL = "https://www.coursera.org/learn/build-ai-apps-with-chatgpt-dalle-gpt4"
+
+# Set to "none" to run locally using Names.xlsx/students.csv and the START/END range.
+# Otherwise, leave as empty string "" to use the coordinator URL from config.json,
+# or specify a custom Google Apps Script Web App URL.
+COORDINATOR_URL = ""
 # ==========================================================
 
 # Always operate from the directory this script lives in.
@@ -100,7 +108,7 @@ if os.path.isdir(bin_dir):
 
 # 4. Playwright browsers ----------------------------------------------------
 # Invoke the CLI through `node` directly so we never depend on the .bin +x bit.
-browsers = "chromium firefox webkit"
+browsers = "chromium"
 cli = os.path.join(HERE, "node_modules", "playwright", "cli.js")
 if os.path.exists(cli):
     install_with_deps = f'node "{cli}" install {browsers} --with-deps'
@@ -118,18 +126,30 @@ if not os.path.exists("students.csv"):
     sys.exit("Error: students.csv not found next to the runner. Upload it first.")
 
 # 6. Run --------------------------------------------------------------------
-print(f"\n=== Setup complete! Starting the runner "
-      f"(START={START}, END={END}, CONCURRENCY={CONCURRENCY}, HEADLESS={HEADLESS}, VPN={VPN}, SPEED={SPEED}) ===")
+print(f"\n=== Setup complete! Starting the runner ===")
 env = dict(os.environ, MODE="auto")
+if COURSE_URL:
+    env["COURSE_URL"] = str(COURSE_URL)
+if COORDINATOR_URL:
+    env["COORDINATOR_URL"] = str(COORDINATOR_URL)
 env["START"] = str(START)
 if END is not None:
     env["END"] = str(END)
 else:
     env.pop("END", None)
 env["CONCURRENCY"] = str(CONCURRENCY)
-env["HEADLESS"] = "y" if HEADLESS else "n"
 env["COURSERA_COLAB"] = "1"
 env["VPN"] = str(VPN)
 env["SPEED"] = str(SPEED)
-if not run("node coursera_manual_runner.js", env=env):
+
+if USE_XVFB:
+    print("Installing Xvfb (Virtual Frame Buffer) for headful evasion...")
+    run("apt-get update -y && apt-get install -y xvfb")
+    env["HEADLESS"] = "n"
+    cmd = "xvfb-run -a -s '-screen 0 1920x1080x24' node coursera_manual_runner.js"
+else:
+    env["HEADLESS"] = "y"
+    cmd = "node coursera_manual_runner.js"
+
+if not run(cmd, env=env):
     sys.exit("The runner exited with an error.")
