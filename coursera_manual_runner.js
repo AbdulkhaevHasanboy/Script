@@ -1337,65 +1337,65 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   }
 
   if (hasPasswordInput) {
-    log("Direct password entry screen detected instantly! Waiting 15 seconds for page to hydrate...");
-    await page.waitForTimeout(15000);
+    log("Direct password entry screen detected! Hydrating and setting password...");
+    await page.waitForTimeout(1000);
     log("Setting password...");
-    await passwordInput.click();
-    await page.waitForTimeout(1000);
-    await passwordInput.focus();
-    await page.keyboard.type(student.password, { delay: 100 });
-    await page.waitForTimeout(1000);
+    await passwordInput.click().catch(() => {});
+    await page.waitForTimeout(300);
+    await passwordInput.focus().catch(() => {});
+    await page.keyboard.type(student.password, { delay: 30 });
+    await page.waitForTimeout(500);
     const setBtn = page.locator('button:has-text("Set Password"), button:has-text("Create password"), button[type="submit"]').filter({ visible: true }).first();
     if (await setBtn.count() > 0) {
       await setBtn.click().catch(() => {});
       log("Clicked Set/Create Password button");
-      await page.waitForTimeout(5000);
+      await page.waitForTimeout(800);
     }
     const contBtn = page.locator('button:has-text("Continue")').filter({ visible: true }).first();
     if (await contBtn.count() > 0) {
       await contBtn.click().catch(() => {});
       log("Clicked Continue button");
-      await page.waitForTimeout(4000);
+      await page.waitForTimeout(800);
     }
     const skipForNowBtn = page.locator('button:has-text("Skip for now"), a:has-text("Skip for now")').filter({ visible: true }).first();
     if (await skipForNowBtn.count() > 0) {
       await skipForNowBtn.click().catch(() => {});
       log("Clicked Skip for now button");
-      await page.waitForTimeout(4000);
+      await page.waitForTimeout(800);
     }
   } else {
-    log("Direct password setup not found immediately. Waiting 3 seconds for page to settle...");
-    await page.waitForTimeout(3000 * TF);
+    log("Direct password setup not found immediately. Checking page state...");
+    await page.waitForTimeout(800);
     await observer.capture("after-wait");
 
     // Double check if password entry became visible after the wait
     const hasPasswordAfterWait = await passwordInput.count().catch(() => 0) > 0;
     if (hasPasswordAfterWait) {
-      log("Direct password entry screen detected after wait! Waiting 5 seconds for page to hydrate...");
-      await page.waitForTimeout(5000);
+      log("Direct password entry screen detected after check! Setting password...");
+      await page.waitForTimeout(800);
       log("Setting password...");
-      await passwordInput.click();
-      await page.waitForTimeout(1000);
-      await passwordInput.focus();
-      await page.keyboard.type(student.password, { delay: 100 });
-      await page.waitForTimeout(1000);
+      await passwordInput.click().catch(() => {});
+      await page.waitForTimeout(300);
+      await passwordInput.focus().catch(() => {});
+      await page.keyboard.type(student.password, { delay: 30 });
+      await page.waitForTimeout(500);
       const setBtn = page.locator('button:has-text("Set Password"), button:has-text("Create password"), button[type="submit"]').filter({ visible: true }).first();
       if (await setBtn.count() > 0) {
         await setBtn.click().catch(() => {});
         log("Clicked Set/Create Password button");
-        await page.waitForTimeout(5000);
+        await page.waitForTimeout(800);
       }
       const contBtn = page.locator('button:has-text("Continue")').filter({ visible: true }).first();
       if (await contBtn.count() > 0) {
         await contBtn.click().catch(() => {});
         log("Clicked Continue button");
-        await page.waitForTimeout(4000);
+        await page.waitForTimeout(800);
       }
       const skipForNowBtn = page.locator('button:has-text("Skip for now"), a:has-text("Skip for now")').filter({ visible: true }).first();
       if (await skipForNowBtn.count() > 0) {
         await skipForNowBtn.click().catch(() => {});
         log("Clicked Skip for now button");
-        await page.waitForTimeout(4000);
+        await page.waitForTimeout(800);
       }
     } else {
       // Check if email input is already visible on the page
@@ -1699,9 +1699,6 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
         }
         if (count > 0) {
           await label.scrollIntoViewIfNeeded({ timeout: 4000 });
-          const quizWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
-          log(`[Quiz] Waiting ${(quizWaitTime / 1000).toFixed(2)}s before selecting option "${pattern}"...`);
-          await page.waitForTimeout(quizWaitTime);
 
           const input = label.locator("input").first();
           if (await input.count() > 0) {
@@ -1715,10 +1712,6 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
         } else {
           const fallback = page.locator("span, div, p").filter({ hasText: pattern }).first();
           if (await fallback.count() > 0) {
-            const quizWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
-            log(`[Quiz] Waiting ${(quizWaitTime / 1000).toFixed(2)}s before selecting fallback option "${pattern}"...`);
-            await page.waitForTimeout(quizWaitTime);
-
             await fallback.click({ timeout: 4000, force: true });
             log(`Answered matching (fallback): ${pattern}`);
           } else {
@@ -1744,20 +1737,18 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
 
     // Submit honor code + submit button
     await fillSel('input[data-testid="honor-code-legal-name-input"]', FULL, { optional: true });
+    
+    log(`[Quiz] Waiting 1.00s after filling name before pressing submit...`);
+    await page.waitForTimeout(1000);
+
     const submitBtn = page.locator('button[data-testid="submit-button"]').filter({ visible: true }).first();
     await submitBtn.scrollIntoViewIfNeeded({ timeout: 5000 * TF }).catch(() => {});
-    
-    const submitWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
-    log(`[Quiz] Waiting ${(submitWaitTime / 1000).toFixed(2)}s before clicking submit button...`);
-    await page.waitForTimeout(submitWaitTime);
     await clickSel('button[data-testid="submit-button"]', { timeout: 10000 });
 
-    const dialogSubmitWaitTime = Math.max(1500, 1500 * TF) + Math.floor(Math.random() * 500);
-    log(`[Quiz] Waiting ${(dialogSubmitWaitTime / 1000).toFixed(2)}s before clicking dialog submit confirmation button...`);
-    await page.waitForTimeout(dialogSubmitWaitTime);
+    await page.waitForTimeout(500);
     await clickSel('button[data-testid="dialog-submit-button"]', { timeout: 12000 });
     
-    await page.waitForTimeout(4000 * TF);
+    await page.waitForTimeout(2000 * TF);
     await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
     await observer.capture(`after-${quiz.name.toLowerCase().replace(" ", "-")}-submit`);
   }
@@ -1782,7 +1773,7 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     const finalReadingPath = "/ungradedWidget/vbdMC/congrats-on-completing-the-course";
     log(`[AUTO] Navigating to final congrats widget: ${LEARN_BASE}${finalReadingPath}`);
     await recoverFromLandingAndRetry(`${LEARN_BASE}${finalReadingPath}`, "final congrats widget");
-    await page.waitForTimeout(5000);
+    await page.waitForTimeout(1000);
   }
 
   // 8) Verify name (required before the certificate is issued) - survey is skipped for speed
@@ -1792,7 +1783,7 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   await clickSel("#check-acknowledge-age-base", { optional: true, force: true });
   
   log("Submitting name verification via adaptive RL decision loop...");
-  const nameDeadline = Date.now() + 20000 * TF;
+  const nameDeadline = Date.now() + 15000 * TF;
   const hasLeftVerification = async () => {
     const url = page.url();
     return !url.includes("user-verification");
@@ -1801,23 +1792,28 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     const madeMove = await adaptiveActionDecision(page, log, hasLeftVerification, TF, profileName, vpnCountry);
     if (!madeMove) {
       log("No confident buttons found on name verification page, trying submit fallback...");
-      const clicked = await clickRole("button", /^submit$/i, { optional: true, timeout: 5000 });
+      const clicked = await clickRole("button", /^submit$/i, { optional: true, timeout: 4000 });
       if (!clicked) {
-        await page.waitForTimeout(3000 * TF);
+        await page.waitForTimeout(800);
       }
     }
   }
-  await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
+  await page.waitForLoadState("networkidle", { timeout: 1500 }).catch(() => {});
   await observer.capture("after-name-verification");
 
-  // 9) Open the certificate and capture its public URL. The certificate can take a little
-  //    while to generate after the course hits 100%, so retry a few times.
+  // 9) Open the certificate and capture its public URL using fast polling
   for (let attempt = 1; attempt <= CERT_ATTEMPTS; attempt++) {
     await goto("https://www.coursera.org/my-learning?myLearningTab=CERTIFICATES");
-    let directUrl = await findCertificateUrl(page);
-    if (directUrl) {
-      log(`certificate link found on page: ${directUrl}`);
-      return directUrl;
+    
+    // Fast poll for up to 4 seconds for the certificate link to appear
+    const pollStart = Date.now();
+    while (Date.now() - pollStart < 4000) {
+      let directUrl = await findCertificateUrl(page);
+      if (directUrl) {
+        log(`certificate link found on page: ${directUrl}`);
+        return directUrl;
+      }
+      await page.waitForTimeout(300);
     }
 
     const certFound = async () => {
@@ -1828,8 +1824,8 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     log(`Attempting to locate certificate page via adaptive RL (attempt ${attempt}/${CERT_ATTEMPTS})...`);
     const madeMove = await adaptiveActionDecision(page, log, certFound, TF, profileName, vpnCountry);
     if (madeMove) {
-      await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
-      directUrl = await findCertificateUrl(page);
+      await page.waitForLoadState("networkidle", { timeout: 1500 }).catch(() => {});
+      let directUrl = await findCertificateUrl(page);
       if (directUrl) {
         log(`certificate page: ${directUrl}`);
         return directUrl;
@@ -1838,8 +1834,8 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       // Fallback
       const viewLink = page.getByRole("link", { name: /view certificate/i }).filter({ visible: true }).first();
       if (await viewLink.count().catch(() => 0)) {
-        await viewLink.click({ timeout: 12000 }).catch(() => {});
-        await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
+        await viewLink.click({ timeout: 8000 }).catch(() => {});
+        await page.waitForLoadState("networkidle", { timeout: 1500 }).catch(() => {});
         const url = await findCertificateUrl(page);
         if (url) {
           log(`certificate page (fallback): ${url}`);
@@ -1849,8 +1845,8 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     }
 
     await observer.capture(`certificate-not-ready-${attempt}`);
-    log(`certificate not ready yet (attempt ${attempt}/${CERT_ATTEMPTS}), waiting...`);
-    await page.waitForTimeout(CERT_WAIT_MS);
+    log(`certificate not ready yet (attempt ${attempt}/${CERT_ATTEMPTS}), retrying...`);
+    await page.waitForTimeout(1500);
   }
   log(`no certificate URL captured (ended at ${page.url()})`);
   await observer.capture("no-certificate-url");
@@ -2070,10 +2066,42 @@ async function buildStudentFromClaim(claim) {
   return student;
 }
 
+async function getDynamicInviteUrl(studentId, log) {
+  log(`Dynamically registering and requesting invite link for student ${studentId}...`);
+  try {
+    const stdout = execSync(`python3 register_and_get_invite.py ${studentId}`, { stdio: "pipe" }).toString().trim();
+    const parts = stdout.split(/\s+/);
+    if (parts.length >= 2 && parts[0].startsWith("http")) {
+      const inviteUrl = parts[0];
+      const email = parts[1];
+      log(`Successfully registered and extracted invite link: ${inviteUrl} using email: ${email}`);
+      return { inviteUrl, email };
+    } else {
+      throw new Error(`Invalid output from script: ${stdout}`);
+    }
+  } catch (e) {
+    const stderr = e.stderr ? e.stderr.toString() : "";
+    throw new Error(`Failed to dynamically register student: ${e.message}. Stderr: ${stderr}`);
+  }
+}
+
 // Run the whole course flow for one student in Chromium, returning { cert, error }.
 async function runFlowWithFallbacks(browser, student, headless, logPrefix, initialProfile = COURSERA_BROWSER_PROFILES[0]) {
   let cert = "";
   let error = "";
+
+  const prefix = logPrefix ? `${logPrefix} ` : "";
+  const log = (m) => console.log(`  ${prefix}[auto] ${m}`);
+
+  // Dynamically register and get invite URL on the fly!
+  try {
+    const { inviteUrl, email } = await getDynamicInviteUrl(student.student_id, log);
+    student.invite_url = inviteUrl;
+    student.email = email;
+  } catch (e) {
+    console.error(`\n${logPrefix} [queue] Dynamic registration failed: ${e.message}`);
+    return { cert: "", error: `DYNAMIC_REGISTRATION_FAILED: ${e.message}` };
+  }
   
   const maxRetries = 3;
   let attemptProfile = initialProfile;
@@ -2249,6 +2277,11 @@ async function runCoordinatorMode(config) {
         processed++;
         globalConsecutiveFailures = 0;
         console.log(`${logPrefix} [queue:w${wid}] DONE -> ${result.cert} (Completed in ${duration} seconds)`);
+
+        // Purge all emails for this student dot-alias across Spam, Inbox, All Mail, and Trash
+        try {
+          execSync(`python3 -c 'import register_and_get_invite as r; r.purge_all_student_emails("${student.email}")'`, { stdio: "ignore" });
+        } catch (e) {}
       } else {
         const isFatalPass = result.error && result.error.includes("FATAL_PASSWORD_ERROR");
         await coordinatorRequest(coordinatorUrl, "fail", {
