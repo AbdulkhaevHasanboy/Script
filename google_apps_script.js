@@ -144,7 +144,7 @@ function _claim(req) {
     }
 
     var row = pick + 2;
-    var rowVals = sh.getRange(row, 1, 1, COL.EMAIL).getValues()[0];
+    var rowVals = sh.getRange(row, 1, 1, COL.PASSWORD).getValues()[0];
     // Fresh round after the cooldown starts the attempt count over; otherwise continue
     // counting within the current round.
     var attempts = (resetAttempts ? 0 : (Number(meta[pick][COL.ATTEMPTS - COL.STATUS]) || 0)) + 1;
@@ -155,7 +155,7 @@ function _claim(req) {
     // clear finished_at + last_error from any previous attempt (I..J)
     sh.getRange(row, COL.FINISHED_AT, 1, 2).setValues([["", ""]]);
     SpreadsheetApp.flush();
-    return { student_id: rowVals[0], full_name: rowVals[1], invit_url: rowVals[2], email: rowVals[10], row: row, attempt: attempts };
+    return { student_id: rowVals[0], full_name: rowVals[1], invit_url: rowVals[2], email: rowVals[10], password: rowVals[11], row: row, attempt: attempts };
   } finally {
     lock.releaseLock();
   }
@@ -187,11 +187,15 @@ function _fail(req) {
   var row = _resolveRow(req);
   if (!row) return { ok: false, error: "row not found" };
   var sh = _sheet();
-  sh.getRange(row, COL.STATUS).setValue("failed");
+  var errStr = String(req.error || "").slice(0, 500);
+  var isPasswordErr = req.fatal || errStr.toLowerCase().indexOf("password") !== -1 || errStr.toLowerCase().indexOf("password err") !== -1;
+  
+  var statusVal = isPasswordErr ? "password err" : "failed";
+  sh.getRange(row, COL.STATUS).setValue(statusVal);
   // clear lease so it is reclaimable, record finished_at + the error  (H..J)
-  sh.getRange(row, COL.LEASE, 1, 3).setValues([["", Date.now(), String(req.error || "").slice(0, 500)]]);
-  if (req.fatal) {
-    sh.getRange(row, COL.ATTEMPTS).setValue(MAX_ATTEMPTS); // max out attempts to prevent retry
+  sh.getRange(row, COL.LEASE, 1, 3).setValues([["", Date.now(), errStr]]);
+  if (isPasswordErr) {
+    sh.getRange(row, COL.ATTEMPTS).setValue(MAX_ATTEMPTS); // max out attempts so it is never retried
   }
   SpreadsheetApp.flush();
   return { ok: true };
@@ -220,7 +224,7 @@ function _resolveRow(req) {
 function _stats() {
   var sh = _sheet();
   var n = sh.getLastRow() - 1;
-  var counts = { pending: 0, "in-progress": 0, done: 0, failed: 0, total: n > 0 ? n : 0 };
+  var counts = { pending: 0, "in-progress": 0, done: 0, failed: 0, "password err": 0, total: n > 0 ? n : 0 };
   if (n < 1) return { counts: counts };
   var statuses = sh.getRange(2, COL.STATUS, n, 1).getValues();
   for (var i = 0; i < n; i++) {

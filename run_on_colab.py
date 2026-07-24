@@ -87,9 +87,9 @@ else:
 run("node -v")
 run("npm -v")
 
-# 2. npm dependencies -------------------------------------------------------
-# These are exactly what coursera_manual_runner.js imports. NOTE: openpyxl is a
-# *Python* package and must never appear here (npm would 404 on it).
+# 2. python & npm dependencies -----------------------------------------------
+run("python3 -m pip install requests")
+
 if not run("npm install playwright playwright-extra puppeteer-extra-plugin-stealth"):
     sys.exit("Error installing npm dependencies.")
 

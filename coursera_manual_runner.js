@@ -12,8 +12,8 @@ const stealth = require("puppeteer-extra-plugin-stealth")();
 chromium.use(stealth);
 
 const CSV_FILE = "students.csv";
-let COURSE_URL = process.env.COURSE_URL || "https://www.coursera.org/learn/introduction-to-generative-ai";
-let COURSE_SLUG = "introduction-to-generative-ai";
+let COURSE_URL = process.env.COURSE_URL || "https://www.coursera.org/learn/build-ai-apps-with-chatgpt-dalle-gpt4";
+let COURSE_SLUG = "build-ai-apps-with-chatgpt-dalle-gpt4";
 let LEARN_BASE = `https://www.coursera.org/learn/${COURSE_SLUG}`;
 const BROWSEC_EXTENSION_ID = "omghfjlpggmjjaagoclmmobgdodcjboh";
 const DEFAULT_BROWSEC_EXTENSION_PATH = path.resolve(__dirname, "extensions", "browsec");
@@ -51,8 +51,8 @@ async function saveLearnedWeights() {
 function getPageStateKey(pageUrl, pageText = "", profileName = "default", vpnCountry = "default") {
   try {
     const url = new URL(pageUrl);
-    // Dynamic key incorporating browser profile and active VPN location
-    let key = `${url.pathname}@${profileName}@${vpnCountry}`;
+    // Normalized key across browser profiles so learned weights persist globally
+    let key = url.pathname;
     if (pageText.includes("unexpected error")) key += "#error";
     if (pageText.includes("Terms of Use")) key += "#tou";
     if (pageText.includes("onetrust")) key += "#cookies";
@@ -132,7 +132,11 @@ async function adaptiveActionDecision(page, log, targetCheck, TF = 1.0, profileN
     if (globalActionWeights[stateKey][text] === undefined) {
       // Bootstrap initial weights to guide early learning
       let initialWeight = 1.0;
-      if (/^(continue|go to course|start learning|go to first project|enroll for free|start|start assignment|resume assignment|view certificate|submit|yes|agree|i agree|accept|i accept|accept all cookies|mark complete|start the guided project|go to first item|completed|certificates|download certificate|share certificate)$/i.test(text)) {
+      if (/^(start assignment|resume assignment|try again|start quiz|start|resume|go to course|start learning|go to first project|enroll for free|view certificate|submit|mark complete|start the guided project|go to first item|completed|certificates|download certificate|share certificate)$/i.test(text)) {
+        initialWeight = 20.0;
+      } else if (currentUrl.includes("/assignment") && /^(go to next item|next item|next|module \d+)/i.test(text)) {
+        initialWeight = -10.0;
+      } else if (/^(continue|yes|agree|i agree|accept|i accept|accept all cookies)$/i.test(text)) {
         initialWeight = 10.0;
       } else if (/close|cancel|reject/i.test(text)) {
         initialWeight = 0.5;
@@ -785,6 +789,77 @@ async function clickAny(page, candidates, { timeout = 12000, optional = false, f
   throw new Error(`could not click any candidate: ${lastError ? lastError.message.split("\n")[0] : "not found"}`);
 }
 
+async function checkExistingCertificate(page, log, FULL = "") {
+  try {
+    if (log) log("Checking for existing certificate / completion card (polling up to 12s for slow load)...");
+    
+    const startTime = Date.now();
+    let certUrl = "";
+    let congratulationsFound = false;
+
+    while (Date.now() - startTime < 12000) {
+      // 1) Direct URL check
+      certUrl = await findCertificateUrl(page);
+      if (certUrl && /\/(share|account\/accomplishments|verify)\b|coursera\.org\/share\//.test(certUrl)) {
+        if (log) log(`[ALREADY COMPLETED] Found certificate URL: ${certUrl}`);
+        return certUrl;
+      }
+
+      // 2) Check for "Congratulations" text or "View certificate" button
+      const bodyText = (await page.innerText("body").catch(() => "")).toLowerCase();
+      if (bodyText.includes("congratulations on completing") || bodyText.includes("your accomplishments")) {
+        congratulationsFound = true;
+      }
+
+      const viewCertBtn = page.locator('a:has-text("View certificate"), button:has-text("View certificate"), a[href*="accomplishments"], a[href*="verify"]').filter({ visible: true }).first();
+      if (await viewCertBtn.count().catch(() => 0) > 0) {
+        congratulationsFound = true;
+        if (log) log("Found 'View certificate' button on screen! Extracting URL...");
+        const href = await viewCertBtn.getAttribute("href").catch(() => "");
+        if (href && (href.includes("accomplishments") || href.includes("verify") || href.includes("share"))) {
+          certUrl = href.startsWith("http") ? href : `https://www.coursera.org${href}`;
+          if (log) log(`[ALREADY COMPLETED] Extracted certificate URL from button: ${certUrl}`);
+          return certUrl;
+        } else {
+          // Click button to open certificate page or tab
+          const [popup] = await Promise.all([
+            page.context().waitForEvent("page", { timeout: 4000 }).catch(() => null),
+            viewCertBtn.click({ timeout: 5000 }).catch(() => {})
+          ]);
+          await page.waitForTimeout(3000);
+          if (popup) {
+            certUrl = popup.url();
+            await popup.close().catch(() => {});
+          } else {
+            certUrl = await findCertificateUrl(page);
+          }
+          if (certUrl && /\/(share|account\/accomplishments|verify)\b|coursera\.org\/share\//.test(certUrl)) {
+            if (log) log(`[ALREADY COMPLETED] Found certificate URL after click: ${certUrl}`);
+            return certUrl;
+          }
+        }
+      }
+
+      await page.waitForTimeout(1000);
+    }
+
+    // 3) Fallback: If "Congratulations" text was seen or certificate exists, check accomplishments tab directly
+    if (congratulationsFound) {
+      if (log) log("Congratulations card detected! Navigating to accomplishments tab to retrieve certificate link...");
+      await page.goto("https://www.coursera.org/user-verification?returnTo=%2Fmy-learning%3FmyLearningTab%3DCERTIFICATES", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(4000);
+      certUrl = await findCertificateUrl(page);
+      if (certUrl && /\/(share|account\/accomplishments|verify)\b|coursera\.org\/share\//.test(certUrl)) {
+        if (log) log(`[ALREADY COMPLETED] Certificate URL retrieved from accomplishments page: ${certUrl}`);
+        return certUrl;
+      }
+    }
+  } catch (err) {
+    if (log) log(`Warning checking existing certificate: ${err.message}`);
+  }
+  return null;
+}
+
 async function findCertificateUrl(page) {
   const currentUrl = page.url();
   if (/coursera\.org\/(share|account\/accomplishments|verify)\b|\/accomplishments\//i.test(currentUrl)) {
@@ -1320,130 +1395,158 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     return /\/learn\//.test(page.url()) && !stillEnroll;
   };
 
-  // 1) Landing page -> Wait 30 seconds -> Open Signup/Login dialog
+  // 1) Landing page -> Open Login modal & fill email + password
   await goto(startUrl);
   await observer.capture("landing");
-  await acceptCookies({ timeout: 1500 });  // dismiss the cookie banner before it blocks anything
+  await acceptCookies({ timeout: 1500 });  // dismiss cookie banner
 
-  // Fast check if password screen is visible within 4 seconds
-  log("Checking for direct password setup screen...");
+  log("Checking for Log In / Welcome back modal...");
+  
+  // Wait up to 30 seconds for Log In dialog or Log In button
+  const checkStart = Date.now();
+  let modalOpen = false;
+
+  while (Date.now() - checkStart < 30000) {
+    const hasEmailField = await page.locator('input[name="email"], input[type="email"]').filter({ visible: true }).count().catch(() => 0) > 0;
+    const hasPassField = await page.locator('input[name="password"], input[type="password"]').filter({ visible: true }).count().catch(() => 0) > 0;
+    
+    if (hasEmailField || hasPassField) {
+      modalOpen = true;
+      break;
+    }
+
+    const loginBtn = page.locator('a:has-text("Log In"), button:has-text("Log In"), [href*="authMode=login"]').filter({ visible: true }).first();
+    if (await loginBtn.count().catch(() => 0) > 0) {
+      await loginBtn.click({ timeout: 5000 }).catch(() => {});
+      log("Clicked Log In button");
+      await page.waitForTimeout(2000);
+    }
+    await page.waitForTimeout(1000);
+  }
+
+  // 2) Fill Email field if present
+  const emailInput = page.locator('input[name="email"], input[type="email"]').filter({ visible: true }).first();
+  if (await emailInput.count().catch(() => 0) > 0) {
+    log(`Filling Email field with: ${student.email}`);
+    await emailInput.click().catch(() => {});
+    await page.waitForTimeout(200);
+    await emailInput.fill("").catch(() => {});
+    await page.waitForTimeout(200);
+    await emailInput.focus().catch(() => {});
+    await page.keyboard.type(student.email, { delay: 30 });
+    await page.waitForTimeout(500);
+
+    const continueEmailBtn = page.locator('button:has-text("Continue"), button[type="submit"]').filter({ visible: true }).first();
+    if (await continueEmailBtn.count().catch(() => 0) > 0) {
+      const btnText = (await continueEmailBtn.innerText().catch(() => "")).toLowerCase();
+      if (btnText.includes("continue")) {
+        await continueEmailBtn.click().catch(() => {});
+        log("Clicked Continue email button");
+        await page.waitForTimeout(1500);
+      }
+    }
+  }
+
+  // 3) Locate Password field
   const passwordInput = page.locator('input[type="password"], input[name="password"]').filter({ visible: true }).first();
   let hasPasswordInput = false;
+
   try {
-    await passwordInput.waitFor({ state: "visible", timeout: 4000 });
+    await passwordInput.waitFor({ state: "visible", timeout: 10000 });
     hasPasswordInput = true;
   } catch {
     hasPasswordInput = false;
   }
 
-  if (hasPasswordInput) {
-    log("Direct password entry screen detected! Hydrating and setting password...");
-    await page.waitForTimeout(1000);
-    log("Setting password...");
-    await passwordInput.click().catch(() => {});
-    await page.waitForTimeout(300);
-    await passwordInput.focus().catch(() => {});
-    await page.keyboard.type(student.password, { delay: 30 });
-    await page.waitForTimeout(500);
-    const setBtn = page.locator('button:has-text("Set Password"), button:has-text("Create password"), button[type="submit"]').filter({ visible: true }).first();
-    if (await setBtn.count() > 0) {
-      await setBtn.click().catch(() => {});
-      log("Clicked Set/Create Password button");
-      await page.waitForTimeout(800);
+  if (!hasPasswordInput) {
+    const err = new Error("FATAL_PASSWORD_ERROR: password err (Password input field did not appear)");
+    err.isFatalPassword = true;
+    throw err;
+  }
+
+  log("Password field detected! Testing password candidates...");
+  
+  // Passwords to try in sequence: adu2026_x FIRST, then student.password, then student.student_id
+  const passwordCandidates = Array.from(new Set([
+    "adu2026_x",
+    student.password,
+    student.student_id
+  ])).filter(Boolean);
+
+  let loginSuccess = false;
+
+  for (const passCandidate of passwordCandidates) {
+    log(`Attempting password: ${passCandidate}`);
+    
+    // Re-ensure email field is populated if visible and cleared
+    if (await emailInput.count().catch(() => 0) > 0) {
+      const currentEmailVal = await emailInput.inputValue().catch(() => "");
+      if (!currentEmailVal || !currentEmailVal.includes("@")) {
+        log(`Re-filling Email field with: ${student.email}`);
+        await emailInput.click().catch(() => {});
+        await emailInput.fill(student.email).catch(() => {});
+        await page.waitForTimeout(300);
+      }
     }
+
+    await passwordInput.click().catch(() => {});
+    await page.waitForTimeout(200);
+    await passwordInput.fill("").catch(() => {});
+    await page.waitForTimeout(200);
+    await passwordInput.focus().catch(() => {});
+    await page.keyboard.type(passCandidate, { delay: 30 });
+    await page.waitForTimeout(300);
+
+    const submitBtn = page.locator('button:has-text("Log In"), button:has-text("Login"), button[type="submit"]').filter({ visible: true }).first();
+    if (await submitBtn.count() > 0) {
+      await submitBtn.click().catch(() => {});
+      log("Clicked Login submit button");
+      await page.waitForTimeout(3000);
+    }
+
     const contBtn = page.locator('button:has-text("Continue")').filter({ visible: true }).first();
     if (await contBtn.count() > 0) {
       await contBtn.click().catch(() => {});
       log("Clicked Continue button");
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(1500);
     }
+
     const skipForNowBtn = page.locator('button:has-text("Skip for now"), a:has-text("Skip for now")').filter({ visible: true }).first();
     if (await skipForNowBtn.count() > 0) {
       await skipForNowBtn.click().catch(() => {});
       log("Clicked Skip for now button");
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(1000);
     }
-  } else {
-    log("Direct password setup not found immediately. Checking page state...");
-    await page.waitForTimeout(800);
-    await observer.capture("after-wait");
 
-    // Double check if password entry became visible after the wait
-    const hasPasswordAfterWait = await passwordInput.count().catch(() => 0) > 0;
-    if (hasPasswordAfterWait) {
-      log("Direct password entry screen detected after check! Setting password...");
-      await page.waitForTimeout(800);
-      log("Setting password...");
-      await passwordInput.click().catch(() => {});
-      await page.waitForTimeout(300);
-      await passwordInput.focus().catch(() => {});
-      await page.keyboard.type(student.password, { delay: 30 });
-      await page.waitForTimeout(500);
-      const setBtn = page.locator('button:has-text("Set Password"), button:has-text("Create password"), button[type="submit"]').filter({ visible: true }).first();
-      if (await setBtn.count() > 0) {
-        await setBtn.click().catch(() => {});
-        log("Clicked Set/Create Password button");
-        await page.waitForTimeout(800);
-      }
-      const contBtn = page.locator('button:has-text("Continue")').filter({ visible: true }).first();
-      if (await contBtn.count() > 0) {
-        await contBtn.click().catch(() => {});
-        log("Clicked Continue button");
-        await page.waitForTimeout(800);
-      }
-      const skipForNowBtn = page.locator('button:has-text("Skip for now"), a:has-text("Skip for now")').filter({ visible: true }).first();
-      if (await skipForNowBtn.count() > 0) {
-        await skipForNowBtn.click().catch(() => {});
-        log("Clicked Skip for now button");
-        await page.waitForTimeout(800);
-      }
+    await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
+    
+    const bodyText = (await page.innerText("body").catch(() => "")).toLowerCase();
+    const hasPassErr = bodyText.includes("we don't recognize that username or password") ||
+                       bodyText.includes("incorrect email or password") || 
+                       bodyText.includes("incorrect password") || 
+                       bodyText.includes("invalid password") ||
+                       bodyText.includes("password is too weak");
+
+    if (!hasPassErr && (page.url().includes("/learn/") || !page.url().includes("authMode"))) {
+      loginSuccess = true;
+      log(`Login with password ${passCandidate} SUCCEEDED! Current URL: ${page.url()}`);
+      break;
     } else {
-      // Check if email input is already visible on the page
-      let hasEmailInput = await page.locator('input[name="email"]').filter({ visible: true }).count().catch(() => 0) > 0;
-      if (!hasEmailInput) {
-        log("Email input not visible; attempting to open Log In / Join dialog...");
-        const loginBtn = page.locator('a:has-text("Log In"), button:has-text("Log In"), [href*="authMode=login"]').filter({ visible: true }).first();
-        if (await loginBtn.count() > 0) {
-          await loginBtn.click({ timeout: 10000 }).catch(() => {});
-          log("Clicked Log In button");
-          await page.waitForTimeout(3000);
-        } else {
-          // Try clicking one of the course cards to trigger enrollment/login
-          const firstCourseCard = page.locator('a[href*="/learn/"]').filter({ visible: true }).first();
-          if (await firstCourseCard.count() > 0) {
-            await firstCourseCard.click({ timeout: 10000 }).catch(() => {});
-            log("Clicked first course card to trigger auth");
-            await page.waitForTimeout(3000);
-          }
-        }
-      }
-
-      // Toggle to Sign Up mode if we are currently in Log In mode, since we want to register
-      const signUpToggle = page.locator('button:has-text("Sign Up"), a:has-text("Sign Up")').filter({ visible: true }).first();
-      if (await signUpToggle.count() > 0) {
-        await signUpToggle.click({ timeout: 5000 }).catch(() => {});
-        log("Toggled dialog to Sign Up mode");
-        await page.waitForTimeout(2000);
-      }
-
-      // 2) Sign-up form
-      log("Filling sign-up credentials...");
-      await fillSel('input[name="email"]', student.email);
-
-      const continueBtn = page.locator('button').filter({ hasText: /^continue$/i }).filter({ visible: true });
-      if (await continueBtn.count() > 0) {
-        log("Continue button visible, clicking it...");
-        await continueBtn.first().click({ timeout: 5000 }).catch(() => {});
-        await page.waitForTimeout(1000);
-      }
-
-      await fillSel('input[name="name"]', FULL);
-      await fillSel('input[name="password"]', student.password);
-      await clickRole("button", /join for free/i);
+      log(`Password candidate ${passCandidate} failed or rejected. Trying next candidate...`);
     }
   }
+
+  if (!loginSuccess) {
+    const err = new Error("FATAL_PASSWORD_ERROR: password err (All password candidates failed for student)");
+    err.isFatalPassword = true;
+    throw err;
+  }
+
   await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
-  log(`after sign-up, URL: ${page.url()}`);
+  log(`after password entry, URL: ${page.url()}`);
+
+  const postLoginCert = await checkExistingCertificate(page, log, FULL);
+  if (postLoginCert) return postLoginCert;
 
   const bodyTextAfterSignup = await page.innerText("body").catch(() => "");
   const lowerBodyAfterSignup = bodyTextAfterSignup.toLowerCase();
@@ -1453,7 +1556,7 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       lowerBodyAfterSignup.includes("password is too weak") ||
       lowerBodyAfterSignup.includes("password must be") ||
       lowerBodyAfterSignup.includes("choose a stronger password")) {
-    const err = new Error("FATAL_PASSWORD_ERROR: Incorrect or invalid password/credentials.");
+    const err = new Error("FATAL_PASSWORD_ERROR: password err (Incorrect or invalid password/credentials)");
     err.isFatalPassword = true;
     throw err;
   }
@@ -1492,6 +1595,9 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     log(`Navigating to target course page: ${COURSE_URL}`);
     await goto(COURSE_URL);
     await page.waitForTimeout(5000);
+
+    const courseCert = await checkExistingCertificate(page, log, FULL);
+    if (courseCert) return courseCert;
   }
 
   // 3) Finish enrollment: run adaptive decision loop until we land in the course (/learn/)
@@ -1665,10 +1771,73 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       await recoverFromLandingAndRetry(`${LEARN_BASE}${quiz.path}`, `${quiz.name} page after login`);
     }
 
+    const checkQuizAlreadyPassed = async () => {
+      // If we are actively answering quiz questions, do NOT treat modals as already passed!
+      const inActiveQuiz = (await page.locator('label, input[type="radio"], input[type="checkbox"]')
+        .filter({ visible: true })
+        .filter({ hasNot: page.locator('[role="dialog"], [role="alertdialog"], .rc-Modal, [data-testid*="modal"]') })
+        .count().catch(() => 0)) > 0;
+      
+      if (inActiveQuiz) return false;
+
+      // 1) Check for "Start new attempt?" modal popup ONLY when NOT in active quiz
+      const newAttemptModal = page.locator('div, section, [role="dialog"]').filter({ hasText: /Start new attempt\?/i }).first();
+      if (await newAttemptModal.count().catch(() => 0) > 0 && await newAttemptModal.isVisible().catch(() => false)) {
+        log(`[Quiz] "Start new attempt?" modal detected for ${quiz.name} (not answering). Quiz is already submitted! Skipping...`);
+        const cancelBtn = newAttemptModal.locator('button:has-text("Cancel")').filter({ visible: true }).first();
+        if (await cancelBtn.count().catch(() => 0) > 0) {
+          await cancelBtn.click().catch(() => {});
+          await page.waitForTimeout(500);
+        }
+        return true;
+      }
+
+      // 2) Check for grade text or green checkmark on quiz page
+      const pageText = (await page.innerText("body").catch(() => "")).toLowerCase();
+      if (pageText.includes("graded assignment • grade:") || 
+          pageText.includes("latest submission grade") || 
+          /grade:\s*\d+%/i.test(pageText) || 
+          (pageText.includes("go to next item") && pageText.includes("try again") && pageText.includes("grade"))) {
+        log(`[Quiz] ${quiz.name} is ALREADY PASSED (grade found on screen). Skipping to next quiz...`);
+        return true;
+      }
+
+      return false;
+    };
+
+    await page.waitForTimeout(1500);
+    if (await checkQuizAlreadyPassed()) {
+      continue;
+    }
+
     log(`[AUTO] Starting ${quiz.name} via adaptive RL decision loop...`);
     const assignDeadline = Date.now() + 30000 * TF;
+    let quizSkipped = false;
+
     while (Date.now() < assignDeadline && !(await isQuizLoaded())) {
       await dismissOverlays(page);
+
+      if (await checkQuizAlreadyPassed()) {
+        quizSkipped = true;
+        break;
+      }
+
+      // Priority check for direct quiz start/resume/retry buttons
+      const quizStartBtn = page.locator('button:has-text("Start assignment"), button:has-text("Resume assignment"), button:has-text("Try again"), button:has-text("Start quiz"), button[data-testid="CoverPageActionButton"]').filter({ visible: true }).first();
+      if (await quizStartBtn.count().catch(() => 0) > 0) {
+        const btnLabel = await quizStartBtn.innerText().catch(() => "Start");
+        log(`[Quiz] Direct quiz button found, clicking "${btnLabel}"...`);
+        await quizStartBtn.click({ timeout: 5000 }).catch(() => {});
+        await page.waitForTimeout(2000);
+
+        if (await checkQuizAlreadyPassed()) {
+          quizSkipped = true;
+          break;
+        }
+
+        if (await isQuizLoaded()) break;
+      }
+
       const madeMove = await adaptiveActionDecision(page, log, isQuizLoaded, TF, profileName, vpnCountry);
       if (!madeMove) {
         log("No confident buttons found on assignment page, trying standard fallbacks...");
@@ -1677,6 +1846,11 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
           await page.waitForTimeout(3000 * TF);
         }
       }
+    }
+
+    if (quizSkipped) {
+      log(`[Quiz] Skipped ${quiz.name} (already passed). Moving to next item...`);
+      continue;
     }
     await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
 
@@ -1740,13 +1914,45 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     
     log(`[Quiz] Waiting 1.00s after filling name before pressing submit...`);
     await page.waitForTimeout(1000);
+    await dismissOverlays(page);
 
     const submitBtn = page.locator('button[data-testid="submit-button"]').filter({ visible: true }).first();
     await submitBtn.scrollIntoViewIfNeeded({ timeout: 5000 * TF }).catch(() => {});
     await clickSel('button[data-testid="submit-button"]', { timeout: 10000 });
 
-    await page.waitForTimeout(500);
-    await clickSel('button[data-testid="dialog-submit-button"]', { timeout: 12000 });
+    log('[Quiz] Waiting for submit modal confirmation dialog...');
+    await page.waitForTimeout(1000);
+    
+    // Poll up to 10 seconds for the modal Submit button
+    const modalStart = Date.now();
+    let modalClicked = false;
+
+    while (Date.now() - modalStart < 10000) {
+      const modalSubmitBtn = page.locator('button[data-testid="dialog-submit-button"], [role="dialog"] button:has-text("Submit"), [role="dialog"] button[type="submit"], div.rc-Modal button:has-text("Submit")').filter({ visible: true }).first();
+      
+      if (await modalSubmitBtn.count().catch(() => 0) > 0 && await modalSubmitBtn.isVisible().catch(() => false)) {
+        log(`[Quiz] Found modal submit button! Clicking...`);
+        await modalSubmitBtn.scrollIntoViewIfNeeded().catch(() => {});
+        await modalSubmitBtn.click({ force: true, timeout: 5000 }).catch(async () => {
+          await modalSubmitBtn.dispatchEvent("click").catch(() => {});
+        });
+        await page.waitForTimeout(1500);
+
+        // Check if modal closed / submission completed
+        const modalStillVisible = await modalSubmitBtn.isVisible().catch(() => false);
+        if (!modalStillVisible) {
+          modalClicked = true;
+          log('[Quiz] Modal submit clicked successfully!');
+          break;
+        }
+      }
+      await page.waitForTimeout(500);
+    }
+
+    if (!modalClicked) {
+      log('[Quiz] Fallback: attempting generic dialog submit click...');
+      await clickSel('button[data-testid="dialog-submit-button"]', { timeout: 5000, optional: true });
+    }
     
     await page.waitForTimeout(2000 * TF);
     await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
@@ -1877,17 +2083,32 @@ async function dismissOverlays(page) {
     await page.waitForTimeout(300);
   }
 
+  // Dismiss "Okay, got it!", "Today's Goals have moved", or informational popups
+  const gotItBtn = page.locator('button:has-text("Okay, got it!"), button:has-text("Got it!"), button:has-text("Got it"), button:has-text("Okay"), button:has-text("Sounds good"), button:has-text("Understood")').filter({ visible: true }).first();
+  if (await gotItBtn.count().catch(() => 0) > 0) {
+    console.log(`  [Dismiss] Clicking 'Okay, got it!' popup button: "${await gotItBtn.innerText().catch(() => "Got it")}"`);
+    await gotItBtn.click({ force: true }).catch(() => {});
+    await page.waitForTimeout(500);
+  }
+
   // Skip / Skip for now / Remind me later interstitials
-  const skipBtn = page.locator('button, a, span').filter({ hasText: /^(skip|skip for now|remind me later|not now|no thanks|dismiss|cancel)$/i }).filter({ visible: true }).first();
+  const skipBtn = page.locator('button, a, span').filter({ hasText: /^(skip|skip for now|remind me later|not now|no thanks|dismiss)$/i }).filter({ visible: true }).first();
   if (await skipBtn.count() > 0) {
     console.log(`  [Dismiss] Clicking skip button: "${await skipBtn.innerText().catch(() => "Skip")}"`);
     await skipBtn.click({ force: true }).catch(() => {});
     await page.waitForTimeout(1000);
   }
 
-  // Dismiss any generic modal overlay by pressing Escape
+  // Dismiss any generic modal overlay by pressing Escape or clicking close X button
   const modal = page.locator('[role="dialog"]').first();
   if (await modal.count() > 0 && await modal.isVisible().catch(() => false)) {
+    const modalText = (await modal.innerText().catch(() => "")).toLowerCase();
+    if (modalText.includes("goals have moved") || modalText.includes("update") || modalText.includes("welcome")) {
+      const modalGotIt = modal.locator('button:has-text("Okay, got it!"), button:has-text("Got it"), button:has-text("Okay")').first();
+      if (await modalGotIt.count().catch(() => 0) > 0) {
+        await modalGotIt.click({ force: true }).catch(() => {});
+      }
+    }
     const closeBtn = modal.locator('button[aria-label="close"], button[aria-label="Close"], button.cds-closeButton').first();
     if (await closeBtn.count() > 0) {
       await closeBtn.click({ force: true }).catch(() => {});
@@ -2056,33 +2277,16 @@ async function buildStudentFromClaim(claim) {
     first_name: first,
     last_name: last,
     email: claim.email || "",
-    password: "",
+    password: claim.password || "",
     invite_url: claim.invit_url || claim.invite_url || ""
   };
   if (!student.email) {
     student.email = makeFreshEmail(student);
   }
-  student.password = makePassword(student);
-  return student;
-}
-
-async function getDynamicInviteUrl(studentId, log) {
-  log(`Dynamically registering and requesting invite link for student ${studentId}...`);
-  try {
-    const stdout = execSync(`python3 register_and_get_invite.py ${studentId}`, { stdio: "pipe" }).toString().trim();
-    const parts = stdout.split(/\s+/);
-    if (parts.length >= 2 && parts[0].startsWith("http")) {
-      const inviteUrl = parts[0];
-      const email = parts[1];
-      log(`Successfully registered and extracted invite link: ${inviteUrl} using email: ${email}`);
-      return { inviteUrl, email };
-    } else {
-      throw new Error(`Invalid output from script: ${stdout}`);
-    }
-  } catch (e) {
-    const stderr = e.stderr ? e.stderr.toString() : "";
-    throw new Error(`Failed to dynamically register student: ${e.message}. Stderr: ${stderr}`);
+  if (!student.password) {
+    student.password = makePassword(student);
   }
+  return student;
 }
 
 // Run the whole course flow for one student in Chromium, returning { cert, error }.
@@ -2093,16 +2297,10 @@ async function runFlowWithFallbacks(browser, student, headless, logPrefix, initi
   const prefix = logPrefix ? `${logPrefix} ` : "";
   const log = (m) => console.log(`  ${prefix}[auto] ${m}`);
 
-  // Dynamically register and get invite URL on the fly!
-  try {
-    const { inviteUrl, email } = await getDynamicInviteUrl(student.student_id, log);
-    student.invite_url = inviteUrl;
-    student.email = email;
-  } catch (e) {
-    console.error(`\n${logPrefix} [queue] Dynamic registration failed: ${e.message}`);
-    return { cert: "", error: `DYNAMIC_REGISTRATION_FAILED: ${e.message}` };
+  if (!student.invite_url) {
+    student.invite_url = COURSE_URL;
   }
-  
+
   const maxRetries = 3;
   let attemptProfile = initialProfile;
   
@@ -2153,8 +2351,9 @@ async function runFlowWithFallbacks(browser, student, headless, logPrefix, initi
     } catch (err) {
       error = err.message;
       console.warn(`\n${logPrefix} [queue] Attempt ${attempt} failed: ${err.message}`);
-      if (err.isFatalPassword) {
-        console.log(`${logPrefix} [queue] Fatal password/credential error detected. Aborting retries.`);
+      if (err.isFatalPassword || (err.message && err.message.toLowerCase().includes("password"))) {
+        console.log(`${logPrefix} [queue] Password error detected ("password err"). Aborting retries immediately.`);
+        error = "password err";
         break;
       }
     } finally {
