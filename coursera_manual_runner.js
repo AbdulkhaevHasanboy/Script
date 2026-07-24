@@ -1792,13 +1792,15 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
         return true;
       }
 
-      // 2) Check for grade text or green checkmark on quiz page
+      // 2) Check for "You passed!" or grade text or green checkmark on quiz page
       const pageText = (await page.innerText("body").catch(() => "")).toLowerCase();
-      if (pageText.includes("graded assignment • grade:") || 
+      if (pageText.includes("you passed!") || 
+          pageText.includes("you passed") ||
+          pageText.includes("graded assignment • grade:") || 
           pageText.includes("latest submission grade") || 
           /grade:\s*\d+%/i.test(pageText) || 
           (pageText.includes("go to next item") && pageText.includes("try again") && pageText.includes("grade"))) {
-        log(`[Quiz] ${quiz.name} is ALREADY PASSED (grade found on screen). Skipping to next quiz...`);
+        log(`[Quiz] ${quiz.name} is ALREADY PASSED ('You passed!' / grade found). Skipping to next quiz...`);
         return true;
       }
 
@@ -1823,7 +1825,7 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       }
 
       // Priority check for direct quiz start/resume/retry buttons
-      const quizStartBtn = page.locator('button:has-text("Start assignment"), button:has-text("Resume assignment"), button:has-text("Try again"), button:has-text("Start quiz"), button[data-testid="CoverPageActionButton"]').filter({ visible: true }).first();
+      const quizStartBtn = page.locator('button:has-text("Resume assignment"), button:has-text("Start assignment"), button:has-text("Try again"), button:has-text("Start quiz"), button[data-testid="CoverPageActionButton"], button:has-text("Start")').filter({ visible: true }).first();
       if (await quizStartBtn.count().catch(() => 0) > 0) {
         const btnLabel = await quizStartBtn.innerText().catch(() => "Start");
         log(`[Quiz] Direct quiz button found, clicking "${btnLabel}"...`);
