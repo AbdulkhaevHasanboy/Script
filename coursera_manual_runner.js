@@ -2075,15 +2075,24 @@ async function promptForCertificateUrl(rl, page) {
 
 // Dismiss any overlays/dialogs that intercept pointer events
 async function dismissOverlays(page) {
-  // Coursera "broken Chrome version" warning dialog
+  // 1) High Priority: Coursera "We've updated our Terms of Use" consent modal
+  const touAcceptBtn = page.locator('button:has-text("I accept"), button:has-text("I Accept"), button:has-text("Accept"), button:has-text("I agree"), button:has-text("Agree"), button:has-text("Accept & Continue")').filter({ visible: true }).first();
+  if (await touAcceptBtn.count().catch(() => 0) > 0) {
+    console.log(`  [Dismiss] Found 'Terms of Use' accept button, clicking: "${await touAcceptBtn.innerText().catch(() => "I accept")}"`);
+    await touAcceptBtn.click({ force: true }).catch(async () => {
+      await touAcceptBtn.dispatchEvent("click").catch(() => {});
+    });
+    await page.waitForTimeout(800);
+  }
+
+  // 2) Coursera "broken Chrome version" warning dialog
   const brokenDialog = page.locator('.broken-chrome-version-dialog-bg-fix, [id*="broken-chrome"]').first();
   if (await brokenDialog.count() > 0 && await brokenDialog.isVisible().catch(() => false)) {
-    // Try pressing Escape to close it
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
   }
 
-  // Dismiss "Okay, got it!", "Today's Goals have moved", or informational popups
+  // 3) Dismiss "Okay, got it!", "Today's Goals have moved", or informational popups
   const gotItBtn = page.locator('button:has-text("Okay, got it!"), button:has-text("Got it!"), button:has-text("Got it"), button:has-text("Okay"), button:has-text("Sounds good"), button:has-text("Understood")').filter({ visible: true }).first();
   if (await gotItBtn.count().catch(() => 0) > 0) {
     console.log(`  [Dismiss] Clicking 'Okay, got it!' popup button: "${await gotItBtn.innerText().catch(() => "Got it")}"`);
@@ -2091,7 +2100,7 @@ async function dismissOverlays(page) {
     await page.waitForTimeout(500);
   }
 
-  // Skip / Skip for now / Remind me later interstitials
+  // 4) Skip / Skip for now / Remind me later interstitials
   const skipBtn = page.locator('button, a, span').filter({ hasText: /^(skip|skip for now|remind me later|not now|no thanks|dismiss)$/i }).filter({ visible: true }).first();
   if (await skipBtn.count() > 0) {
     console.log(`  [Dismiss] Clicking skip button: "${await skipBtn.innerText().catch(() => "Skip")}"`);
@@ -2099,11 +2108,16 @@ async function dismissOverlays(page) {
     await page.waitForTimeout(1000);
   }
 
-  // Dismiss any generic modal overlay by pressing Escape or clicking close X button
+  // 5) Dismiss any generic modal overlay by clicking Accept, Escape, or close X button
   const modal = page.locator('[role="dialog"]').first();
   if (await modal.count() > 0 && await modal.isVisible().catch(() => false)) {
     const modalText = (await modal.innerText().catch(() => "")).toLowerCase();
-    if (modalText.includes("goals have moved") || modalText.includes("update") || modalText.includes("welcome")) {
+    if (modalText.includes("terms of use") || modalText.includes("privacy")) {
+      const modalAccept = modal.locator('button:has-text("I accept"), button:has-text("Accept"), button:has-text("I agree")').first();
+      if (await modalAccept.count().catch(() => 0) > 0) {
+        await modalAccept.click({ force: true }).catch(() => {});
+      }
+    } else if (modalText.includes("goals have moved") || modalText.includes("update") || modalText.includes("welcome")) {
       const modalGotIt = modal.locator('button:has-text("Okay, got it!"), button:has-text("Got it"), button:has-text("Okay")').first();
       if (await modalGotIt.count().catch(() => 0) > 0) {
         await modalGotIt.click({ force: true }).catch(() => {});
