@@ -24,7 +24,7 @@ import sys
 # Only used when COORDINATOR_URL is "none".
 START = 1
 END = 100
-CONCURRENCY = 1      # how many browsers run in parallel
+CONCURRENCY = 2      # how many browsers run in parallel
 USE_XVFB = True      # Run headful inside virtual display (Xvfb) on Colab to bypass headless anti-bot blocks
 VPN = "n"            # "y" to enable Browsec VPN extension, "n" to disable
 SPEED = 1            # Timeout multiplier (defaults to 2 automatically if VPN is enabled)
