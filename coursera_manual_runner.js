@@ -47,16 +47,6 @@ async function saveLearnedWeights() {
   }
 }
 
-async function resetLearnedWeights() {
-  globalActionWeights = {};
-  try {
-    await fs.unlink("learned_weights.json");
-    console.warn("[RL] 15 consecutive failures reached: Deleted learned_weights.json and reset Q-table from scratch.");
-  } catch (e) {
-    console.warn("[RL] 15 consecutive failures reached: Reset Q-table in memory.");
-  }
-}
-
 function getPageStateKey(pageUrl, pageText = "", profileName = "default", vpnCountry = "default") {
   try {
     const url = new URL(pageUrl);
@@ -2675,8 +2665,6 @@ async function runCoordinatorMode(config) {
         }).catch((e) => console.warn(`${logPrefix} report 'complete' failed: ${e.message}`));
         processed++;
         globalConsecutiveFailures = 0;
-        // Success speeds execution up slightly (clamped at minimum 1.0 baseline)
-        globalRemediationFactor = Math.max(1.0, globalRemediationFactor - 0.1);
         console.log(`${logPrefix} [queue:w${wid}] DONE -> ${result.cert} (Completed in ${duration} seconds)`);
 
         // Purge all emails for this student dot-alias across Spam, Inbox, All Mail, and Trash (non-blocking async)
@@ -2693,17 +2681,24 @@ async function runCoordinatorMode(config) {
         failedHere++;
         globalConsecutiveFailures++;
         console.log(`${logPrefix} [queue:w${wid}] FAILED -> released for another PC to retry (Failed in ${duration} seconds). Error: ${result.error || "no certificate captured"}`);
-        console.warn(`[queue] Consecutive student failures: ${globalConsecutiveFailures}`);
-        
-        // Decrease speed by 0.2x after every 5 consecutive errors
-        if (globalConsecutiveFailures % 5 === 0) {
-          globalRemediationFactor += 0.2;
-          console.warn(`[remediation] ${globalConsecutiveFailures} consecutive failures reached. Decreased speed by 0.2x (remediation scale now ${globalRemediationFactor.toFixed(2)}).`);
-        }
-
-        // If error count reaches 15, delete learned_weights.json and start RL Q-table from scratch
-        if (globalConsecutiveFailures >= 15) {
-          await resetLearnedWeights();
+        console.error(`[CRITICAL] Consecutive student failures: ${globalConsecutiveFailures}/5`);
+        if (globalConsecutiveFailures >= 5) {
+          if (!cooldownActive) {
+            cooldownActive = true;
+            console.error(`[CRITICAL] 5 consecutive student failures detected. Entering cooling-down sleep for 5 hours before automatically resuming queue processing...`);
+            for (let hr = 1; hr <= 5; hr++) {
+              await sleep(60 * 60 * 1000); // Wait 1 hour
+              console.log(`[Cooldown Update] ${hr}/5 hours elapsed...`);
+            }
+            globalConsecutiveFailures = 0;
+            cooldownActive = false;
+            console.log(`[INFO] Cool-down complete. Resuming queue processing...`);
+          } else {
+            // If another worker thread already triggered the cooldown, wait until it finishes
+            while (cooldownActive) {
+              await sleep(10000);
+            }
+          }
         }
       }
     }
@@ -3025,20 +3020,27 @@ async function main() {
         if (student.certificate_url) {
           student.registered = "true";
           globalConsecutiveFailures = 0;
-          globalRemediationFactor = Math.max(1.0, globalRemediationFactor - 0.1);
           console.log(`\n${logPrefix} Certificate captured: ${student.certificate_url} (Completed in ${duration} seconds)`);
         } else {
           globalConsecutiveFailures++;
           console.log(`\n${logPrefix} Flow finished but no certificate URL was captured (Failed in ${duration} seconds).`);
-          console.warn(`[AUTO] Consecutive student failures: ${globalConsecutiveFailures}`);
-
-          if (globalConsecutiveFailures % 5 === 0) {
-            globalRemediationFactor += 0.2;
-            console.warn(`[remediation] ${globalConsecutiveFailures} consecutive failures reached. Decreased speed by 0.2x (remediation scale now ${globalRemediationFactor.toFixed(2)}).`);
-          }
-
-          if (globalConsecutiveFailures >= 15) {
-            await resetLearnedWeights();
+          console.error(`[CRITICAL] Consecutive student failures: ${globalConsecutiveFailures}/5`);
+          if (globalConsecutiveFailures >= 5) {
+            if (!cooldownActive) {
+              cooldownActive = true;
+              console.error(`[CRITICAL] 5 consecutive student failures detected. Entering cooling-down sleep for 5 hours before automatically resuming execution...`);
+              for (let hr = 1; hr <= 5; hr++) {
+                await sleep(60 * 60 * 1000); // Wait 1 hour
+                console.log(`[Cooldown Update] ${hr}/5 hours elapsed...`);
+              }
+              globalConsecutiveFailures = 0;
+              cooldownActive = false;
+              console.log(`[INFO] Cool-down complete. Resuming execution...`);
+            } else {
+              while (cooldownActive) {
+                await sleep(10000);
+              }
+            }
           }
         }
 

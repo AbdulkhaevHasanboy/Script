@@ -1,0 +1,184 @@
+Delivered-To: q.werty.u.i.oplk.jh.gf.d.saz.xcv.bnm.hrh@gmail.com
+Received: by 2002:a05:7023:884:b0:13b:6624:e471 with SMTP id ps4csp2018199dlb;
+        Tue, 28 Jul 2026 04:53:55 -0700 (PDT)
+X-Received: by 2002:a05:6000:1842:b0:47f:9759:7f0e with SMTP id ffacd0b85a97d-47fb1e5cf35mr2443287f8f.7.1785239635383;
+        Tue, 28 Jul 2026 04:53:55 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1785239635; cv=none;
+        d=google.com; s=arc-20260327;
+        b=aTZMIBUWpOLHdcl1B5sN+VhA1y3dTkjtymnTPqVxFrQpP5FOObpVmfEG2tBtpIuS31
+         I8mmTAbebg7209Ldt5o3PtB6il92RkVEvgOsQ8GfSUAWh2xDergWZtJuBp7jb3VGaURF
+         mTMH4JKx/e7fzj/lo0D0xK3m9h1d0O1RqqVMyQyL2UGZ6hWJA4xMIh98Sw3rZBYVXl2j
+         rDpAAUSCAQrdYFqA/LLnL2KKcbOmXBQDwMbzYsLKbMas6cwWpfLj2eRldEPvh4dfFt41
+         Yc1SEWlKOxcrCJlPW13OsUJFSJ4nhVmDWYIA84TUK3sGaO7pzsmVecK0U83n5IoH9Gq9
+         CeJw==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327;
+        h=mime-version:subject:message-id:to:from:date:dkim-signature;
+        bh=zPoyAOKzNGlinNfwpRVQkMalX2ZVtM+huH7wIZsN8Sk=;
+        fh=KytOhx17ebp6Tz+NqotQ34UTmvQULJQxOu7t6h5Ha4w=;
+        b=RZgX+RsF0qnQ7riW1yfpbdw/uhoTYGdvPpnfV8mTMztJoo8lSw+jgVeUg5r6qtJKJY
+         CehzpZzyoFUaCy8TKBD2udEsfQgAdvbwZ+jWoDDkSkwWwpyebuUsCn/w/twP6+YOaoBi
+         gsp1IdVjymQkQa/aq15H5IP+SPHMfTUfai8tf6JivPtQD6mCR0BpDOANy8VH44LjB+bb
+         xl2BSYe6IysWZh5frT1gR3DD3cl7PX8bJoo3M1ZpLakSb5qGhZL9ZyOfrC8DOZWFHVpd
+         QwhqWLcKDkjI1rc+A9vv9tblRn/fGKQ2gfaOJSfn85Lvwa2sdRF5oYZgoFGAHTiC/zJP
+         Atpg==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@uzbcoders.uz header.s=dkim header.b=DVLjacjs;
+       spf=pass (google.com: domain of noreply1@uzbcoders.uz designates 87.192.236.233 as permitted sender) smtp.mailfrom=noreply1@uzbcoders.uz;
+       dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=uzbcoders.uz
+Return-Path: <noreply1@uzbcoders.uz>
+Received: from mail.uzbcoders.uz (mail.uzbcoders.uz. [87.192.236.233])
+        by mx.google.com with ESMTPS id ffacd0b85a97d-47f86b39437si36403505f8f.430.2026.07.28.04.53.55
+        for <q.werty.u.i.oplk.jh.gf.d.saz.xcv.bnm.hrh@gmail.com>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Tue, 28 Jul 2026 04:53:55 -0700 (PDT)
+Received-SPF: pass (google.com: domain of noreply1@uzbcoders.uz designates 87.192.236.233 as permitted sender) client-ip=87.192.236.233;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@uzbcoders.uz header.s=dkim header.b=DVLjacjs;
+       spf=pass (google.com: domain of noreply1@uzbcoders.uz designates 87.192.236.233 as permitted sender) smtp.mailfrom=noreply1@uzbcoders.uz;
+       dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=uzbcoders.uz
+Received: from [127.0.0.1] (localhost [127.0.0.1]) by localhost (Mailerdaemon) with ESMTPSA id 905B778499D9
+	for <q.werty.u.i.oplk.jh.gf.d.saz.xcv.bnm.hrh@gmail.com>; Tue, 28 Jul 2026 16:53:53 +0500 (+05)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=uzbcoders.uz;
+	s=dkim; t=1785239633; h=from:subject:date:message-id:to:mime-version:content-type;
+	bh=zPoyAOKzNGlinNfwpRVQkMalX2ZVtM+huH7wIZsN8Sk=;
+	b=DVLjacjsUdqbSzekMNBZaO4IZYcadFpO6gk+wTNjzZE3MHwzgHkx/usaZYglTasBbPaDl/
+	QvqIG0U6WJYpHhT2exxdQtu3uUFxzDp3KWQwt8mLtUxzTZ2oqOEbCU0ezso2ZuosUE8BAu
+	1CRh5C65LMtqBf58HefURPIKL58gkTVN8Hx4YQ58hYzRg76gjti+IOlzGltsYD+C9esGHk
+	zyJjwRFnRNJ1RGd55CqgO1Jdrr/KyfOliSEdQDciLLBYXK+dDomtA2n4PL/9APEccX7wM+
+	0XAMIOkJ1GayYb0vGgD1RtYlQxtDmxOzVzdh+iVTvxswcYs+DcoIz89YgZShQA==
+Date: Tue, 28 Jul 2026 16:53:53 +0500 (UZT)
+From: noreply1@uzbcoders.uz
+To: q.werty.u.i.oplk.jh.gf.d.saz.xcv.bnm.hrh@gmail.com
+Message-ID: <645018824.566373.1785239633575.JavaMail.root@74f00d81e40c>
+Subject: Activation link
+MIME-Version: 1.0
+Content-Type: multipart/mixed; 
+	boundary="----=_Part_566371_103703035.1785239633511"
+X-Last-TLS-Session-Version: TLSv1.2
+
+------=_Part_566371_103703035.1785239633511
+Content-Type: multipart/related; 
+	boundary="----=_Part_566372_2048532768.1785239633511"
+
+------=_Part_566372_2048532768.1785239633511
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 2.5rem;
+        box-sizing: border-box;
+        font-family: sans-serif;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6,
+      p {
+        padding: 0;
+        margin: 0;
+      }
+
+      .card {
+        max-width: 640px;
+        padding: 40px;
+        border: 1px solid #eee;
+        border-top-width: 3px;
+        border-top-color: #0284c7;
+        border-radius: 4px;
+      }
+
+      .header {
+        display: block;
+        text-align: center;
+        width: 100%;
+      }
+
+      .max-w-sm {
+        max-width: 640px;
+      }
+
+      .w-full {
+        width: 100%;
+      }
+
+      .my-4 {
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .mx-4 {
+        margin-left: 1rem;
+        margin-right: 1rem;
+      }
+
+      .mx-auto {
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .mt-4 {
+        margin-top: 1rem;
+      }
+
+      .mb-4 {
+        margin-bottom: 1rem;
+      }
+
+      .text-gray-900 {
+        color: #18181b;
+      }
+
+      .text-gray-800 {
+        color: #3f3f46;
+      }
+
+      .text-gray-500 {
+        color: #71717a;
+      }
+
+      @media (max-width: 640px) {
+        body {
+          padding: 1rem;
+        }
+
+        .header img {
+          width: 100px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="header">
+      <img src="https://uzbekcoders.uz/api/cdn/coursera.png" alt="coursera" width="200" />
+      <img src="https://uzbekcoders.uz/api/cdn/coders.png" alt="uzbekcoders" width="200" />
+    </header>
+
+    <div class="card mx-auto text-gray-500">
+      <h3 class="mb-4 text-gray-900">Hello VALIYEV ALIMARDON</h3>
+
+      <p class="mb-4">
+        To verify your email, please follow this link :
+      </p>
+      <p>https://aileaders.uz/auth/activate/1785237668838?type=form&amp;email=q.werty.u.i.oplk.jh.gf.d.saz.xcv.bnm.hrh@gmail.com&amp;phone=998881361104&amp;token=6a1680830ddc0453ccead6077ced18ac664a3124</p>
+
+      <p>The One Million Uzbek Coders Team</p>
+    </div>
+  </body>
+</html>
+
+------=_Part_566372_2048532768.1785239633511--
+
+------=_Part_566371_103703035.1785239633511--

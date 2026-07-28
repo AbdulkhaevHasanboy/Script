@@ -20,8 +20,8 @@ BASE_URL = "https://aileaders.uz"
 GMAIL_USER = "qwertyuioplkjhgfdsazxcvbnmhrh@gmail.com"
 
 # Settings
-CONCURRENCY = 20
-TARGET_REGISTRATIONS = 1200
+CONCURRENCY = 25
+TARGET_REGISTRATIONS = 1400
 
 HEADERS = {
     "accept": "*/*",
@@ -166,6 +166,29 @@ def flush_all_data():
 
     # 3. Update used_emails.json
     flush_used_emails()
+
+    # 4. Update Names.xlsx
+    try:
+        if EXCEL_PATH.exists():
+            excel_lock_path = EXCEL_PATH.with_suffix(".xlsx.lock")
+            with open(excel_lock_path, "w") as lock_f:
+                fcntl.flock(lock_f, fcntl.LOCK_EX)
+                wb = openpyxl.load_workbook(EXCEL_PATH)
+                ws = wb["Talabalar"]
+                passport_to_row = {}
+                for r in range(2, ws.max_row + 1):
+                    pass_val = str(ws.cell(row=r, column=2).value or "").strip()
+                    if pass_val:
+                        passport_to_row[pass_val] = r
+                for doc, (email_addr, _) in current_results.items():
+                    row_idx = passport_to_row.get(doc)
+                    if row_idx:
+                        ws.cell(row=row_idx, column=7, value=email_addr)
+                wb.save(EXCEL_PATH)
+                print("💾 Flushed updates to Names.xlsx")
+                fcntl.flock(lock_f, fcntl.LOCK_UN)
+    except Exception as e:
+        print(f"⚠️ Error flushing Names.xlsx: {e}")
 
 success_counter = 0
 counter_lock = threading.Lock()

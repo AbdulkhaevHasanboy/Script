@@ -1,0 +1,1242 @@
+Delivered-To: qwert.y.ui.opl.k.jhgf.d.saz.x.cvb.n.mhrh@gmail.com
+Received: by 2002:a05:7023:884:b0:13b:6624:e471 with SMTP id ps4csp1971176dlb;
+        Tue, 28 Jul 2026 03:38:23 -0700 (PDT)
+X-Received: by 2002:a05:6a20:7485:b0:3b5:6b5a:4f31 with SMTP id adf61e73a8af0-3c8ba630170mr2421163637.27.1785234038608;
+        Tue, 28 Jul 2026 03:20:38 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1785234038; cv=none;
+        d=google.com; s=arc-20260327;
+        b=XxUyjWIV8rYaBS/1tVl6hHuBZJoT3yHBZ/xBxCuL/8hiJnnSGLuu1swaPwPbBSP8oU
+         4qi/Gomu5AuKAyBfqWTuFd21dFrhVBnv55hZPpJSd4vTf1RZHNXBANGGxNagUHWrsLdT
+         7s72j0/mTlO75/SI1CeOqfSjMmuxcdPyrJIvWVib+IlK5rwc5p5MHTBgXc9fdzmOfBnP
+         A24yGe/hwiqZCqfdxK/8Uu3PDlE/V4Wd5ehTMwxcY4UNml08CoP8CY+ZuG6G3qm7PNye
+         vvc/rP1u4jJo4rkSP2OD9uelYIeIeDG40WpTcMARrU3X2kddaXvWqKHdDQfnswYM6ywh
+         Eb3A==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327;
+        h=from:subject:mime-version:date:message-id:to:dkim-signature;
+        bh=IVLzmbpoxmBMo9Ov1WZi3gEbpGriAO6tklUhdfQ5TlY=;
+        fh=UdW5Nm3vXVf90HMI4mcv7BEoDrQ8JoELpvO7tTooJsk=;
+        b=AjmAW5qj7EajZWeZn+y+l78USWYIBjFPfxMgZO3WmPgu5EDv9R8eT1xc3gTMYDPtLN
+         Mht1BZpYPPtlF+Nja00A53Zrw8SU4eaymHlJxjxklLoPAiK9eDezwyKVYKO0vqkT0l21
+         KxwacPH6+x8/BRaR7PeevvJ01OPouDhWpvqFUeSRMpwPVGEEQ56HrrXxdyNQuNS1b2kT
+         Krv+YSn/TnwFI5dyrpnDA3DZWEOHEyTPh6+TyTkNzibnbAMxLxC1FwXNE80THLmkzO3C
+         opNZ2kF4cbnjKXHR/N+a8+x5O8L4y/zVjM3L451aAqHlAJ3neXZg+sIAEacQ3Ls1c0G1
+         9DaQ==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@t.learn.coursera.org header.s=scph0426 header.b="Rou/PfyV";
+       spf=pass (google.com: domain of msprvs1=20669s6tmumjs=bounces-266693-993@t.learn.coursera.org designates 137.22.232.186 as permitted sender) smtp.mailfrom="msprvs1=20669s6TMumJS=bounces-266693-993@t.learn.coursera.org";
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=coursera.org
+Return-Path: <msprvs1=20669s6TMumJS=bounces-266693-993@t.learn.coursera.org>
+Received: from l9z6jwh7.t.learn.coursera.org (l9z6jwh7.t.learn.coursera.org. [137.22.232.186])
+        by mx.google.com with ESMTPS id 5a478bee46e88-314cfd36aeasi36102972eec.75.2026.07.28.03.20.38
+        for <qwert.y.ui.opl.k.jhgf.d.saz.x.cvb.n.mhrh@gmail.com>
+        (version=TLS1_2 cipher=ECDHE-ECDSA-AES128-GCM-SHA256 bits=128/128);
+        Tue, 28 Jul 2026 03:20:38 -0700 (PDT)
+Received-SPF: pass (google.com: domain of msprvs1=20669s6tmumjs=bounces-266693-993@t.learn.coursera.org designates 137.22.232.186 as permitted sender) client-ip=137.22.232.186;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@t.learn.coursera.org header.s=scph0426 header.b="Rou/PfyV";
+       spf=pass (google.com: domain of msprvs1=20669s6tmumjs=bounces-266693-993@t.learn.coursera.org designates 137.22.232.186 as permitted sender) smtp.mailfrom="msprvs1=20669s6TMumJS=bounces-266693-993@t.learn.coursera.org";
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=coursera.org
+X-MSFBL: FZg11gchKdcvXH7KCWutZ1JP5QcNOvN7jiVCvS/WEgU=|eyJjdXN0b21lcl9pZCI
+	6IjI2NjY5MyIsInN1YmFjY291bnRfaWQiOiI5OTMiLCJ0ZW5hbnRfaWQiOiJzcGM
+	iLCJyIjoicXdlcnQueS51aS5vcGwuay5qaGdmLmQuc2F6LnguY3ZiLm4ubWhyaEB
+	nbWFpbC5jb20iLCJtZXNzYWdlX2lkIjoiNmE2Nzc2ODI2ODZhZjg2NjJlYWYifQ=
+	=
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+	d=t.learn.coursera.org; s=scph0426; t=1785234038;
+	i=@t.learn.coursera.org;
+	bh=IVLzmbpoxmBMo9Ov1WZi3gEbpGriAO6tklUhdfQ5TlY=;
+	h=To:Message-ID:Date:Content-Type:Subject:From:From:To:Cc:Subject:
+	 Feedback-Id;
+	b=Rou/PfyVuEfXj515snDO5EMy73orDypfwqi+2k/dn3gI8CkixmSnGxJz1/L8BBQ9I
+	 abDrXlxvnQncs6/qfnWpUkpY5KP1asn8ynIXNJTi4nHRZQ7L2JTkw++/+r+DYXM4CS
+	 +R5aLZ2nqKXo+tsGgY5Wj6BOIyraT7+MLwczufibmH/IfvQ+Q1MvSqpWbUcFysALkv
+	 +f03ZTTH3ZT7e3b2MBEDujpTjS6G0JzBV3RwW5AonrFCeG1SwBd9EfWxtGnrkhXiAT
+	 4N60d8LDSZRV5iUSOvSoV45JQOpJNQfp7zazrc1EyXrs2wLhoQYaXP3xRIYvFyhrYm
+	 QFq4eXFLutqFw==
+Received: from [10.90.31.47] ([10.90.31.47])
+	by i-0f2f3bd8c7e158c7b.mta1vrest.sd.prd.sparkpost (ecelerity 5.3.0.76327 r(msys-ecelerity:tags/5.3.0.1)) with REST
+	id FA/E2-32048-672886A6; Tue, 28 Jul 2026 10:20:38 +0000
+To: qwert.y.ui.opl.k.jhgf.d.saz.x.cvb.n.mhrh@gmail.com
+Message-ID: <FA.E2.32048.672886A6@i-0f2f3bd8c7e158c7b.mta1vrest.sd.prd.sparkpost>
+Date: Tue, 28 Jul 2026 10:20:38 +0000
+Content-Type: multipart/alternative; boundary="_----Q0Gf047OBntOfYri6ZOPIQ===_CA/E2-32048-672886A6"
+MIME-Version: 1.0
+Subject: You're invited to join Coursera!
+From: "Coursera" <no-reply@t.learn.coursera.org>
+
+--_----Q0Gf047OBntOfYri6ZOPIQ===_CA/E2-32048-672886A6
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="UTF-8"
+
+[Coursera Logo]=0D=0A<https://link.coursera.org/f/a/imRR-MYfPa2DlqZgw7qHXQ~=
+~/AAQRxRA~/wSvtOliRCG5QBN3-s4jCF1DCDjiZnnc_FaqOPV4PPvf4LkVEa8GqTTJdTuLY-dwz=
+CKF3RQ4Ge3JHd17D2CPtt3VYdlnjhwtlgyMMpXTg8wPsGPFPN3o-FDK0K0yZ539vV327iW6G-XP=
+sG5yHImJuyjGS-0WdLRXvbjoi9vld0IFRV-Je1EFQcaArbA_fWz48DGEyW0Rv5qgPsoEyTBFtk0=
+2TkD9Djewya9Kg3vvKnY4~>=0D=0A=E2=80=8A=0D=0A[Organization Logo]=0D=0AYou're=
+ invited to join Coursera=0D=0A=E2=80=8A=0D=0AHello G'ULOMQODIROVA ZILOLAXO=
+N,=0D=0A=E2=80=8A=0D=0ADigital Education Development Centre's Learning Team=
+ partnered with =0D=0ACoursera, the global online learning platform, so tha=
+t you can learn new, =0D=0Ajob-relevant skills to advance your career. Acce=
+ss thousands of courses =0D=0Afrom top universities and industry leaders. L=
+earn at your own pace, =0D=0Adiscover new topics, and earn recognized certi=
+ficates to showcase your =0D=0Askills.=0D=0A=E2=80=8A=0D=0AJoin now=0D=0A<h=
+ttps://link.coursera.org/f/a/lvNCZPVPMYr98BLvoVjpPw~~/AAQRxRA~/rW9xdt3A8gjU=
+z2X5MzQSXxTJF3I719QNOdnqe6gkQBWyDBJt2EeEkcJtasgTOrNM48F8LJq8dPe6ZFCb-9odkWl=
+h9pIchITGfnQzNgrhNKzlBy_xgVpmiE8VPZGut8nhfBomCEBuLKCqFH3Utq2eeXRl01He2v6_XS=
+6iKw0IVYwiDVO8nxz7sB-Qoc2JL5gBQn4MDDQqNJU3dlNy0_nIaPivh9B_fbLu71hroxOYmyFtG=
+NA822urEimAfXmiLDEhYI9DfT0wTzm8ncZfX5CI10cKJYWNMJJ6nPsiErFAMoxnaElclihJQ7XT=
+70k_GA2Klcqp7TtykipueM6yOW1fxS6o3iSOV4SRwCNypEPmWq1WQFBFjixZhubjJqUb9AlARzZ=
+trINbZzE1o0OzFjCGxoa2blSN4jsQMRC1fb0F6GvXBYmsPjW4v5pBKBIipp_cRgzcQNOnqglWfM=
+vQbneU7xiKkESm1NCrSio5VcEi7TMCX983qRyOzE--L0aSzV8lvQBBcS3WyCRKCe8PVDwsinza4=
+mRMyfHcBQurAZWuKdJra1X2vsr2EAW1bsIJugSfZl52Nb5SwQQNnWtP8apKVJH3e4v2T1VlJLwI=
+YNJs5pWF1afaHrpy0EgBxhX30SV2fynqo0bDt5jHvLYvVW-EWw~~>=0D=0AWith Coursera, y=
+ou can learn=0D=0A=E2=80=8A=0D=0A[Clock icon]=0D=0ALearn at your own pace=
+=0D=0AWhenever you want, wherever you want=0D=0A=E2=80=8A=0D=0A[Institution=
+ icon]=0D=0AFrom the best=0D=0AWith online courses from the world's top uni=
+versities and companies=0D=0A=E2=80=8A=0D=0A[Certificate icon]=0D=0AAnd sha=
+re your Certificate=0D=0AApply what you've learned and connect course certi=
+ficates to your LinkedIn =0D=0Aprofile=0D=0AGetting started is easy=0D=0A=
+=E2=80=8A=0D=0AOnce you've joined, browse the platform and enroll in course=
+s that match =0D=0Ayour interests and goals.=0D=0A=E2=80=8A=0D=0AStart lear=
+ning=0D=0A<https://link.coursera.org/f/a/trhjzneSZuLYYH7aIy7-kw~~/AAQRxRA~/=
+g5-jw1MnWwJbwZiKtUVju-HHjP-FDOi1CrpJcwSAcMMz00rAmcMXOSwjJVy8tDwY28d3r-xJmxy=
+kaZ2XjTbhmZhPt6Fw_rVg_Quk99mOkun0ZpDrKqvqabfhN02DpJrNQf6cgUijf2nzxuepPDCkAg=
+rfXl51bzb170dNWUwqtyNI3JwB-bxvLSUlNXKQ8GC_JJY6YcQ0PfywrAbt5vR_MyeFZ35DhaDgk=
+6NJa_Ra-CDuRzIirqvKJL48JHtsOleZmn-wANDf-3v5ceDxBcE597m7yUn5X0Q-48u1YFr-YRg~=
+>=0D=0A=E2=80=8A=0D=0A=E2=80=8A=0D=0A[Coursera Logo]=0D=0A<https://link.cou=
+rsera.org/f/a/imRR-MYfPa2DlqZgw7qHXQ~~/AAQRxRA~/wSvtOliRCG5QBN3-s4jCF1DCDji=
+Znnc_FaqOPV4PPvf4LkVEa8GqTTJdTuLY-dwzCKF3RQ4Ge3JHd17D2CPtt3VYdlnjhwtlgyMMpX=
+Tg8wPsGPFPN3o-FDK0K0yZ539vV327iW6G-XPsG5yHImJuyjGS-0WdLRXvbjoi9vld0IFRV-Je1=
+EFQcaArbA_fWz48DGEyW0Rv5qgPsoEyTBFtk02TkD9Djewya9Kg3vvKnY4~>=0D=0A=E2=80=8A=
+=0D=0ALearner Help Center=0D=0A<https://link.coursera.org/f/a/rQMHxm0KTxfzd=
+ADPtej7aA~~/AAQRxRA~/J-vWGQBfNl9FIhGtcUSYLtDpfIq9gtW247JhFZiWBNastcocFOfSju=
+9B12RyzROl4tyGki7tkBexRgKLl84n-8yWkr-hWRxNyM5H3qQ9m-wW41Y3afETTidytI6mIUc56=
+rTTmY8dQ-f4O44iGTMIcWkaeQUWFr2Zx6L_l9hL_lspnHJYN21Nxdd74rhBPhCtOsxlIl3droGw=
+YhhoHkq599xJ5B2H1VM2suzez24pcBWuXObWuy9rPhKhBVgdC4QR9rTG9fRX7iBBLPkJxQ1eiw~=
+~>=0D=0A=E2=80=8A=0D=0ACoursera for Business=0D=0A<https://link.coursera.or=
+g/f/a/JvqvGWlSd3D3ywr8JaVw9A~~/AAQRxRA~/L-AyxtRb3aDsAb2ykMTZno0h6d2DSXzOhzW=
+5siNufWVmIJkxGmS7Xa45qXnciyri8iuEw_5-qXp_cSmBO6GiaxJdqybw13Ol_Hd7vPIaCrFNaH=
+iq8tdmZkEn2Kmbg-ruUiqDUhAK7N9LHVaSergv9cMWxGSd5PAIB2SKJyw9wuKk7C8SpqfmvEypl=
+cdxGwU123IcjOIi1JbWEc-SU6KvZiNeghZOMoiBQlOUaP_ehDWiwl-6jZuMFB1070YwKmD90ik0=
+pRxElZJz-bDTmDXPiYk6_P22ANaIeF1rdd3vDkob7_tNjwh32ZYTsW28FRgiaGJKmhZbZQmQ6-k=
+XnXWBfQ~~>=0D=0A=E2=80=8A=0D=0ACommunication Preferences=0D=0A<https://link=
+.coursera.org/f/a/-b626GywlDzxTq0nWeaTGQ~~/AAQRxRA~/pmhFkbTBmXihL5umgSkHDH=
+vzNpdXVDFU_y0vMPFFk56NNXOjRi3mBE2-w8T5cFlhm2iGBgvZ0k7YvCqg6F9hv2NyWgOQP3z7E=
+H_1qKCOY22BOqEMvArrty9S2jw7SBnMdRMGIOVn6vu3cLSYrXs7VXpTAtHjLwbawrFTbWD-k8Vd=
+IvQCwoOeUnEeXj7EgdwB2F34j8YBxuy9WOIT04GQvtEYQTG2VND3o538NTDiam_pmk2EHnd7iIF=
+fBBaXBVlI>=0D=0A=E2=80=8A=0D=0APrivacy Notice=0D=0A<https://link.coursera.o=
+rg/f/a/zkac7bSDuYEG7P2zaIfX_A~~/AAQRxRA~/H9CALQfD53AZ-z_-u3GBAiPmwvovEPwKAH=
+_bT-jusXLFsxaMhMhricp_UqY8pUkZz3D5zbvq7xirfKq4P5haLm4E0UrlliW2NlchNtFS6A1Rk=
+_quHtRbfXftW3ZsqmXJEXIoW7Uq4GHQhIm97KlPF6YODw83iPY-54iou4vzWt8upjiczF30expn=
+AmUva455fch_bqx0d1wVwD6lO5hiShfkwir_sSpNxtiGDFmWQYNQBuCliyTCQkCbRd9uTFCj>=
+=0D=0A=E2=80=8A=0D=0ADownload our App=0D=0A=E2=80=8A=0D=0A[Google Play Stor=
+e]=0D=0A<https://link.coursera.org/f/a/hlz0u4ttZoqlSZjPV9KpUw~~/AAQRxRA~/1w=
+-85r1HkQZM2d8tvf7QQZBw32GTX0cc0WyIM-5d-gtBdsn4nBD8nu-scsLZeovxuGQdI6gJB4q03=
+8THsqWKY3O17PYn3i761_VFP0JHjmdJ0O22NytInqVoGMuaWjoZ1eFTKl0pX-pKmyd7ihr1LWwT=
+BEGsvkJspVQvpl5GhJbCAGOsHkGQuWnfYEsBkwdF4LHehJBfY1OGRNoYYG-Q5TopjEvkH6BPw_5=
+TLnx4IUx2HuGVCL8YfhJmc3HGeLO2ynr5RoS8n6xWQNIN64TPV99yiPsK6Y4SeBdS42TXhdM~>=
+=0D=0A=E2=80=8A=0D=0A[Apple Play Store]=0D=0A<https://link.coursera.org/f/a=
+/kpRIkoAPv1nFeIrlSpTrfQ~~/AAQRxRA~/a9LfMpIw6x6BRp5VYrOKSphkfyJu3krvqAdlCV_K=
+qIfzgMw6bz6o5g2s4wFecu8ujp6I68A6CJN3jGeJ_EoAk7NTztmjAOIz9suIghQ5EXpUhrHxFMm=
+X2bDaDUJ7qREpPM54sVSwOZbV5oUUab0crYkIzUdS_SNkHHKDsI0JGbK0okcHU23E7GfAFjg7ap=
+Dutawey0OgKHrK_POSzXYID84Rw29ctllrWDzRmdkj4-TzAEwAQDkelrRXq5_JjLAYPDNv-ht5x=
+Pp4MxtQWx8Ctl8uMesQgDn_NX_iPN79FQ0~>=0D=0A=E2=80=8A=0D=0A[Linkedin]=0D=0A<h=
+ttps://link.coursera.org/f/a/YmO_wJsUeSund59h77E7ew~~/AAQRxRA~/tfch7aoJl7n2=
+bHeWlnzQr4UvW9UhIbpUGyiVS2OtVhIp1ugXB_zTU1QNxWjsaw_5HHk1Ianft59oOH_SZK4UIPW=
+B01DONn5ALaB7sF7xZOz6lkEjy3nJaFHtuSJnRzfVa0h1Vvnf_JsfLur--d6oyw6sWM6KEuXY7N=
+X_xAJPR2SmhxGqiTkiW0f8iyPln8o6XpmK2pGWbDlYEZ29Srcbx2yisOmIdiW63YHPnhJQ8IzpC=
+AjaqetrQypLRM8CCZfV48nxl31IvQ_2n2ojiecJpQ~~>=0D=0A[Instagram]=0D=0A<https:/=
+/link.coursera.org/f/a/D0n4pF3EtxnGF5KgvDHdxQ~~/AAQRxRA~/nZHeEcVooeM-FNAdOw=
+jmGOPxOWr795_JPw3JCiUKS2bFBDR34OueAK1Ir2FJBhQbn2pX7UtGDYKlHbFy0vFloQXLrk-KC=
+8r0Q_qDgEW_IXDoFJq_X8tplms6PUe8I1YUQN8qL488IwTwr4PVDlOtbt-Qk_q5pssqvr1a362s=
+v1WCBQ8PB7njKssRtC4QTLVOXnCfrL6-EWzq-rQNGhYbSXpgRFrdt1ubsMzzr4VUaWJjjGpgYe8=
+YpWeSjKMGIdME>=0D=0A[Tiktok]=0D=0A<https://link.coursera.org/f/a/mvnoUKtHd-=
+d35XALTri8Ww~~/AAQRxRA~/VPrmVq_9m--o8L0NyiPr_8a4ke-mxuvxZrDvmEcf8PR4qMFGSvC=
+MPBFPD4exqguqTIUEGtOvJMi6XMDkpo1jmpOv2-KN-o_RAJBJnJkTq1YdwJ4U1abgqSFz6T97bD=
+LQSMhC8rJ3JiPxiGLrXOLIEmwGDV4_JZ_EDMK6vQRZluE8PPetZA8RblH41ZVsP-Acs3r8WICrX=
+CL3cOuKOTOeRL340vKUfZZQvgVQ8er4ChuvXTIk9_KJzS_gnsVYpdCl>=0D=0A[Facebook]=0D=
+=0A<https://link.coursera.org/f/a/GOG4_Dq4Fxum1OusqVDk0Q~~/AAQRxRA~/2PL6_xa=
+srxE37dsVpfHGOeOYP7sKIEywjV_UGiMnKjV4D1c1qxVUErO69Krjo9ohyU9evYY3cF9aVZKuyn=
+t5bn1zzms5oGySwLMF9vOF_0kgmSYoxxmSlz9EfoyhOtfxUnFDTWDVi4AEC8C6mWLANGAqyMRYW=
+vZNlNj5TZD66CEXRMm0z2C0sGl5YU5LP-Ny7i7gUAU4DOBVBcZ7toiHOv9xQqFB_RaG_0gRRRQo=
+CHLyba7scpu0_ZQEKpMULC7M>=0D=0A[X]=0D=0A<https://link.coursera.org/f/a/3ZAZ=
+qTAb2BFiz-hpPIetvg~~/AAQRxRA~/rvzsK2IFHjVChua9_VUIKPP-kmJ7EMXcRCO2X-EHLSrQ6=
+a1EFX9E9aGTiRiOiurhz-9DZirPU97VjWyu6Y8ztPOQzdtK6wrWHuJ42_DDf6YfEAHmNZyHktJl=
+EjOvi9_hEJB8D_WHxhjmRmoRsairwdJQAIJGN9AHfbKMmxf9l6H-rV7ognUIGl5JZuajbbtNpqJ=
+YZlmiKJRL8e-mr7IVGvDsckUaPvaxk4-AIzoC4ZuJVqy8Hnplki4fX0xqPpys>=0D=0A=E2=80=
+=8A=0D=0A=C2=A9 2026 Coursera Inc. All rights reserved. Coursera and the Co=
+ursera logo =0D=0Aare registered trademarks of Coursera, Inc. All other tra=
+demarks are =0D=0Aproperty of their respective owners.=0D=0A=E2=80=8A=0D=0A=
+Coursera | 2440 West El Camino Real, Suite 500, Mountain View, CA 94040 USA
+--_----Q0Gf047OBntOfYri6ZOPIQ===_CA/E2-32048-672886A6
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/html; charset="UTF-8"
+
+<!DOCTYPE html>=0A<!-- WARNING: AUTOGENERATED BY BUILD PROCESS. DO NOT EDIT=
+ --><!-- smartling.placeholder_format_custom=3D\{\{([^}]+)\}\} --><html dir=
+=3D"ltr" xmlns=3D"http://www.w3.org/1999/xhtml" xmlns:v=3D"urn:schemas-micr=
+osoft-com:vml" xmlns:o=3D"urn:schemas-microsoft-com:office:office">=0A<head=
+>=0A<title></title>=0A<!--[if !mso]><!--><meta http-equiv=3D"X-UA-Compatibl=
+e" content=3D"IE=3Dedge">=0A<!--<![endif]--><meta http-equiv=3D"Content-Typ=
+e" content=3D"text/html; charset=3DUTF-8">=0A<meta name=3D"viewport" conten=
+t=3D"width=3Ddevice-width,initial-scale=3D1">=0A<!--[if mso]>=0A    <noscri=
+pt>=0A    <xml>=0A    <o:OfficeDocumentSettings>=0A      <o:AllowPNG/>=0A  =
+    <o:PixelsPerInch>96</o:PixelsPerInch>=0A    </o:OfficeDocumentSettings>=
+=0A    </xml>=0A    </noscript>=0A    <![endif]--><!--[if lte mso 11]>=0A  =
+  <style type=3D"text/css">=0A      .mj-outlook-group-fix { width:100% !imp=
+ortant; }=0A    </style>=0A    <![endif]--><style>body {=0Amargin: 0; paddi=
+ng: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%;=0A}=0Aim=
+g {=0Aborder: 0; height: auto; line-height: 100%; outline: 0; text-decorati=
+on: none; -ms-interpolation-mode: bicubic;=0A}=0A@container (max-width:699p=
+x) {=0A=0A}=0A.cmds-button a:focus-visible {=0Aoutline: 2px solid transpare=
+nt; position: relative;=0A}=0A.cmds-button a:focus-visible::after {=0Aconte=
+nt: ''; position: absolute; top: -2px; left: -2px; right: -2px; bottom: -2p=
+x; border-radius: 4px; box-shadow: 0 0 0 1px #0048b0,0 0 0 2px #f0f6ff; poi=
+nter-events: none;=0A}=0A@container (max-width:699px) {=0A=0A}=0A@container=
+ (max-width:699px) {=0A=0A}=0A@container (max-width:699px) {=0A=0A}=0A@medi=
+a only screen and (min-width:480px) {=0A  .mj-column-per-100 {=0A    width:=
+ 100% !important; max-width: 100%;=0A  }=0A  .mj-column-px-56 {=0A    width=
+: 56px !important; max-width: 56px;=0A  }=0A  .mj-column-per-50 {=0A    wid=
+th: 50% !important; max-width: 50%;=0A  }=0A  .mj-column-px-334 {=0A    wid=
+th: 334px !important; max-width: 334px;=0A  }=0A  .mj-column-px-32 {=0A    =
+width: 32px !important; max-width: 32px;=0A  }=0A  .mj-column-px-264 {=0A  =
+  width: 264px !important; max-width: 264px;=0A  }=0A  .mj-column-per-20 {=
+=0A    width: 20% !important; max-width: 20%;=0A  }=0A}=0A@media screen and=
+ (max-width:699px) {=0A  .cmds-base-wrapper {=0A    padding-left: 20px; pad=
+ding-right: 20px;=0A  }=0A  .align-mobile-center {=0A    text-align: -webki=
+t-center !important;=0A  }=0A  .align-mobile-center>* {=0A    text-align: c=
+enter !important;=0A  }=0A  .align-mobile-left {=0A    text-align: -webkit-=
+left !important;=0A  }=0A  .align-mobile-left>* {=0A    text-align: left !i=
+mportant;=0A  }=0A  .align-mobile-right {=0A    text-align: -webkit-right !=
+important;=0A  }=0A  .align-mobile-right>* {=0A    text-align: right !impor=
+tant;=0A  }=0A  .cmds-footer-social-icon {=0A    padding-right: 16px !impor=
+tant; padding-left: 0 !important;=0A  }=0A  .cmds-grid>table>tbody>tr>td {=
+=0A    text-align: left !important;=0A  }=0A  .cmds-grid-item-gutter {=0A  =
+  display: none !important;=0A  }=0A  .cmds-grid-item-gutter-xs {=0A    dis=
+play: inline-block !important;=0A  }=0A}=0A@media screen and (max-width:599=
+.95px) {=0A  .cmds-header-image-default>table td {=0A    width: 111px !imp=
+ortant;=0A  }=0A  .cmds-header-image-default-plus>table td {=0A    width: 1=
+62px !important;=0A  }=0A  .cmds-header-image-double-partner-1 {=0A    padd=
+ing-right: 0 !important; padding-bottom: 8px !important;=0A  }=0A  .cmds-he=
+ader-image-double-partner-2 {=0A    padding-left: 0 !important; padding-top=
+: 8px !important;=0A  }=0A  .cmds-typography-titleLarge>div {=0A    font-si=
+ze: 33px !important; line-height: 42px !important; letter-spacing: -.01em !=
+important;=0A  }=0A  .cmds-typography-titleMedium>div {=0A    font-size: 28=
+px !important; line-height: 32px !important; letter-spacing: -.005em !impor=
+tant;=0A  }=0A  .cmds-typography-subtitleLarge>div {=0A    font-size: 18px =
+!important; line-height: 28px !important; letter-spacing: -.003em !importan=
+t;=0A  }=0A  .cmds-typography-subtitleMedium>div {=0A    font-size: 15px !i=
+mportant; line-height: 24px !important; letter-spacing: -.003em !important;=
+=0A  }=0A  .cmds-typography-bodyPrimary>div {=0A    font-size: 15px !import=
+ant; line-height: 22px !important;=0A  }=0A  .cmds-typography-bodySecondary=
+>div {=0A    font-size: 15px !important; line-height: 24px !important;=0A  =
+}=0A  .cmds-typography-actionPrimary>div {=0A    letter-spacing: .01em !imp=
+ortant;=0A  }=0A}=0A@media only screen and (max-width:480px) {=0A  table.mj=
+-full-width-mobile {=0A    width: 100% !important;=0A  }=0A  td.mj-full-wid=
+th-mobile {=0A    width: auto !important;=0A  }=0A}=0A</style>=0A</head>=0A=
+<body style=3D"word-spacing: normal; -webkit-text-size-adjust: 100%; -ms-te=
+xt-size-adjust: 100%; margin: 0; padding: 0;" bgcolor=3D"#fff">=0D=0A<div s=
+tyle=3D"color:transparent;visibility:hidden;opacity:0;font-size:0px;border:=
+0;max-height:1px;width:1px;margin:0px;padding:0px;border-width:0px!importan=
+t;display:none!important;line-height:0px!important;"><img border=3D"0" widt=
+h=3D"1" height=3D"1" src=3D"https://link.coursera.org/q/DYanXa_5qaqNhJKvsA_=
+fMw~~/AAQRxRA~/3qEO9U4fyQRUyUyJOwKYsDjFZjg10lYSKjyzhaNch3_eO0Gw_X9C9KrDO75k=
+i84qYE7hEbSORWvtRDR4Hw9nuj9DFpr7uMcr1ds847_nNN3q2y3nS2QX2okaFO9paV0i" alt=
+=3D""/></div>=0D=0A<div style=3D"background-color: #fff;">=0A<div class=3D"=
+cmds-base-wrapper-container" style=3D"container-type: inline-size;">=0A<!--=
+[if mso | IE]><table align=3D"center" border=3D"0" cellpadding=3D"0" cellsp=
+acing=3D"0" class=3D"cmds-base-wrapper-outlook" role=3D"presentation" style=
+=3D"width:700px;" width=3D"700" ><tr><td style=3D"line-height:0px;font-size=
+:0px;mso-line-height-rule:exactly;"><![endif]--><div class=3D"cmds-base-wra=
+pper" style=3D"max-width: 700px; margin: 0 auto;"><table align=3D"center" b=
+order=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=
+=3D"width: 100%; border-collapse: collapse; mso-table-lspace: 0pt; mso-tabl=
+e-rspace: 0pt;"><tbody><tr><td style=3D"direction: ltr; font-size: 0px; bor=
+der-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; paddi=
+ng: 20px 0;" align=3D"center">=0A<!--[if mso | IE]><table role=3D"presentat=
+ion" border=3D"0" cellpadding=3D"0" cellspacing=3D"0"><tr><td class=3D"" wi=
+dth=3D"700px" ><table align=3D"center" border=3D"0" cellpadding=3D"0" cells=
+pacing=3D"0" class=3D"" role=3D"presentation" style=3D"width:700px;" width=
+=3D"700" ><tr><td style=3D"line-height:0px;font-size:0px;mso-line-height-ru=
+le:exactly;"><![endif]--><div style=3D"max-width: 700px; margin: 0 auto;"><=
+table align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" rol=
+e=3D"presentation" style=3D"width: 100%; border-collapse: collapse; mso-tab=
+le-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=3D"direction: =
+ltr; font-size: 0px; border-collapse: collapse; mso-table-lspace: 0pt; mso-=
+table-rspace: 0pt; padding: 0;" align=3D"center">=0A<!--[if mso | IE]><tabl=
+e role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"0"><t=
+r><td class=3D"" style=3D"vertical-align:top;width:700px;" ><![endif]--><di=
+v class=3D"mj-column-per-100 mj-outlook-group-fix" style=3D"font-size: 0px;=
+ direction: ltr; display: inline-block; vertical-align: top; width: 100%;" =
+align=3D"left"><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=
+=3D"presentation" style=3D"vertical-align: top; border-collapse: collapse; =
+mso-table-lspace: 0pt; mso-table-rspace: 0pt;" width=3D"100%"><tbody>=0A<tr=
+><td class=3D"cmds-spacer-0" style=3D"font-size: 0px; word-break: break-wor=
+d; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;=
+"><div style=3D"height: 32px; line-height: 32px;">=E2=80=8A</div></td></tr>=
+=0A<tr><td align=3D"center" class=3D"cmds-header-image-default" style=3D"fo=
+nt-size: 0px; word-break: break-word; border-collapse: collapse; mso-table-=
+lspace: 0pt; mso-table-rspace: 0pt; padding: 10px 25px;"><table border=3D"0=
+" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"border=
+-collapse: collapse; border-spacing: 0px; mso-table-lspace: 0pt; mso-table-=
+rspace: 0pt;"><tbody><tr><td style=3D"width: 140px; border-collapse: collap=
+se; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><a href=3D"https://link.=
+coursera.org/f/a/imRR-MYfPa2DlqZgw7qHXQ~~/AAQRxRA~/wSvtOliRCG5QBN3-s4jCF1DC=
+DjiZnnc_FaqOPV4PPvf4LkVEa8GqTTJdTuLY-dwzCKF3RQ4Ge3JHd17D2CPtt3VYdlnjhwtlgyM=
+MpXTg8wPsGPFPN3o-FDK0K0yZ539vV327iW6G-XPsG5yHImJuyjGS-0WdLRXvbjoi9vld0IFRV-=
+Je1EFQcaArbA_fWz48DGEyW0Rv5qgPsoEyTBFtk02TkD9Djewya9Kg3vvKnY4~" target=3D"_=
+blank"><img alt=3D"Coursera Logo" height=3D"auto" src=3D"https://dfsnmxrwzn=
+4gu.cloudfront.net/0.1.18/logos/coursera_logo.png" style=3D"display: block;=
+ outline: 0; text-decoration: none; height: auto; width: 100%; font-size: 1=
+3px; line-height: 100%; -ms-interpolation-mode: bicubic; border-width: 0;" =
+width=3D"140"></a></td></tr></tbody></table></td></tr>=0A<tr><td class=3D"c=
+mds-spacer-1" style=3D"font-size: 0px; word-break: break-word; border-colla=
+pse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><div style=3D=
+"height: 32px; line-height: 32px;">=E2=80=8A</div></td></tr>=0A<tr><td clas=
+s=3D"cmds-divider-horizontal-0" style=3D"font-size: 0px; word-break: break-=
+word; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0=
+pt; padding: 0;">=0A<p style=3D"border-top-width: 1px; border-top-color: #e=
+8eef7; border-top-style: solid; font-size: 1px; width: 100%; display: block=
+; margin: 0 auto;"></p>=0A<!--[if mso | IE]><table align=3D"center" border=
+=3D"0" cellpadding=3D"0" cellspacing=3D"0" style=3D"border-top:solid 1px #e=
+8eef7;font-size:1px;margin:0px auto;width:700px;" role=3D"presentation" wid=
+th=3D"700px" ><tr><td style=3D"height:0;line-height:0;"> &nbsp;=0A</td></tr=
+></table><![endif]-->=0A</td></tr>=0A</tbody></table></div>=0A<!--[if mso |=
+ IE]></td></tr></table><![endif]-->=0A</td></tr></tbody></table></div>=0A<!=
+--[if mso | IE]></td></tr></table></td></tr></table><![endif]-->=0A</td></t=
+r></tbody></table></div>=0A<!--[if mso | IE]></td></tr></table><![endif]-->=
+=0A</div>=0A<!--[if mso | IE]><table align=3D"center" border=3D"0" cellpadd=
+ing=3D"0" cellspacing=3D"0" class=3D"" role=3D"presentation" style=3D"width=
+:700px;" width=3D"700" ><tr><td style=3D"line-height:0px;font-size:0px;mso-=
+line-height-rule:exactly;"><![endif]--><div style=3D"max-width: 700px; marg=
+in: 0 auto;"><table align=3D"center" border=3D"0" cellpadding=3D"0" cellspa=
+cing=3D"0" role=3D"presentation" style=3D"width: 100%; border-collapse: col=
+lapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=
+=3D"direction: ltr; font-size: 0px; border-collapse: collapse; mso-table-ls=
+pace: 0pt; mso-table-rspace: 0pt; padding: 20px 0;" align=3D"center">=0A<!-=
+-[if mso | IE]><table role=3D"presentation" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0"><tr><td class=3D"" width=3D"700px" ><table align=3D"cente=
+r" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"" role=3D"pres=
+entation" style=3D"width:700px;" width=3D"700" ><tr><td style=3D"line-heigh=
+t:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif]--><div style=
+=3D"max-width: 700px; margin: 0 auto;"><table align=3D"center" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"width: =
+100%; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0=
+pt;"><tbody><tr><td style=3D"direction: ltr; font-size: 0px; border-collaps=
+e: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padding: 20px 0;=
+" align=3D"center">=0A<!--[if mso | IE]><table role=3D"presentation" border=
+=3D"0" cellpadding=3D"0" cellspacing=3D"0"><tr><td class=3D"" style=3D"vert=
+ical-align:top;width:700px;" ><![endif]--><div class=3D"mj-column-per-100 m=
+j-outlook-group-fix" style=3D"font-size: 0px; direction: ltr; display: inli=
+ne-block; vertical-align: top; width: 100%;" align=3D"left"><table border=
+=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D"1=
+00%" style=3D"border-collapse: collapse; mso-table-lspace: 0pt; mso-table-r=
+space: 0pt;"><tbody><tr><td style=3D"border-collapse: collapse; mso-table-l=
+space: 0pt; mso-table-rspace: 0pt; padding: 0 20px;" valign=3D"top"><table =
+border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" widt=
+h=3D"100%" style=3D"border-collapse: collapse; mso-table-lspace: 0pt; mso-t=
+able-rspace: 0pt;"><tbody><tr><td align=3D"center" style=3D"font-size: 0px;=
+ word-break: break-word; border-collapse: collapse; mso-table-lspace: 0pt; =
+mso-table-rspace: 0pt; padding: 10px 25px;"><table border=3D"0" cellpadding=
+=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"border-collapse: co=
+llapse; border-spacing: 0px; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"=
+><tbody><tr><td style=3D"width: 125px; border-collapse: collapse; mso-table=
+-lspace: 0pt; mso-table-rspace: 0pt;"><img alt=3D"Organization Logo" height=
+=3D"auto" src=3D"https://coursera-university-assets.s3.amazonaws.com/1f/c39=
+4b619fb41ab87a37284955cb293/Artboard-1-4x.png" style=3D"display: block; out=
+line: 0; text-decoration: none; height: auto; width: 100%; font-size: 13px;=
+ line-height: 100%; -ms-interpolation-mode: bicubic; border-width: 0;" widt=
+h=3D"125"></td></tr></tbody></table></td></tr></tbody></table></td></tr></t=
+body></table></div>=0A<!--[if mso | IE]></td></tr></table><![endif]-->=0A</=
+td></tr></tbody></table></div>=0A<!--[if mso | IE]></td></tr></table></td><=
+/tr></table><![endif]-->=0A</td></tr></tbody></table></div>=0A<!--[if mso |=
+ IE]></td></tr></table><![endif]--> <div class=3D"cmds-base-wrapper-contain=
+er" style=3D"container-type: inline-size;">=0A<!--[if mso | IE]><table alig=
+n=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"cmds=
+-base-wrapper-outlook" role=3D"presentation" style=3D"width:700px;" width=
+=3D"700" ><tr><td style=3D"line-height:0px;font-size:0px;mso-line-height-ru=
+le:exactly;"><![endif]--><div class=3D"cmds-base-wrapper" style=3D"max-widt=
+h: 700px; margin: 0 auto;"><table align=3D"center" border=3D"0" cellpadding=
+=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"width: 100%; border=
+-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody>=
+<tr><td style=3D"direction: ltr; font-size: 0px; border-collapse: collapse;=
+ mso-table-lspace: 0pt; mso-table-rspace: 0pt; padding: 20px 0;" align=3D"c=
+enter">=0A<!--[if mso | IE]><table role=3D"presentation" border=3D"0" cellp=
+adding=3D"0" cellspacing=3D"0"><tr><td class=3D"" width=3D"700px" ><table a=
+lign=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D""=
+ role=3D"presentation" style=3D"width:700px;" width=3D"700" ><tr><td style=
+=3D"line-height:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif]-=
+-><div style=3D"max-width: 700px; margin: 0 auto;"><table align=3D"center" =
+border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" styl=
+e=3D"width: 100%; border-collapse: collapse; mso-table-lspace: 0pt; mso-tab=
+le-rspace: 0pt;"><tbody><tr><td style=3D"direction: ltr; font-size: 0px; bo=
+rder-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padd=
+ing: 0;" align=3D"center">=0A<!--[if mso | IE]><table role=3D"presentation"=
+ border=3D"0" cellpadding=3D"0" cellspacing=3D"0"><tr><td class=3D"" style=
+=3D"vertical-align:top;width:700px;" ><![endif]--><div class=3D"mj-column-p=
+er-100 mj-outlook-group-fix" style=3D"font-size: 0px; direction: ltr; displ=
+ay: inline-block; vertical-align: top; width: 100%;" align=3D"left"><table =
+border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" widt=
+h=3D"100%" style=3D"border-collapse: collapse; mso-table-lspace: 0pt; mso-t=
+able-rspace: 0pt;"><tbody><tr><td style=3D"border-collapse: collapse; mso-t=
+able-lspace: 0pt; mso-table-rspace: 0pt; padding: 0;" valign=3D"top"><table=
+ border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" wid=
+th=3D"100%" style=3D"border-collapse: collapse; mso-table-lspace: 0pt; mso-=
+table-rspace: 0pt;"><tbody>=0A<tr><td align=3D"left" class=3D"cmds-typograp=
+hy cmds-typography-titleLarge" style=3D"font-size: 0px; word-break: break-w=
+ord; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0p=
+t; font-weight: inherit; line-height: inherit; letter-spacing: inherit; col=
+or: inherit; margin: 0;"><div style=3D"font-family: Helvetica,Arial,sans-se=
+rif; font-size: 43px; font-weight: 700; letter-spacing: 0; line-height: 54p=
+x; color: #0f1114;" align=3D"left">You're invited to join Coursera</div></t=
+d></tr>=0A<tr><td class=3D"cmds-spacer-2" style=3D"font-size: 0px; word-bre=
+ak: break-word; border-collapse: collapse; mso-table-lspace: 0pt; mso-table=
+-rspace: 0pt;"><div style=3D"height: 24px; line-height: 24px;">=E2=80=8A</d=
+iv></td></tr>=0A<tr><td align=3D"left" class=3D"cmds-typography cmds-typogr=
+aphy-subtitleMedium" style=3D"font-size: 0px; word-break: break-word; borde=
+r-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; font-we=
+ight: inherit; line-height: inherit; letter-spacing: inherit; color: inheri=
+t; margin: 0;"><div style=3D"font-family: Helvetica,Arial,sans-serif; font-=
+size: 18px; font-weight: 700; letter-spacing: 0; line-height: 28px; color: =
+#0f1114;" align=3D"left">Hello G'ULOMQODIROVA ZILOLAXON,</div></td></tr>=0A=
+<tr><td class=3D"cmds-spacer-3" style=3D"font-size: 0px; word-break: break-=
+word; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0=
+pt;"><div style=3D"height: 24px; line-height: 24px;">=E2=80=8A</div></td></=
+tr>=0A<tr><td align=3D"left" class=3D"cmds-typography cmds-typography-bodyP=
+rimary" style=3D"font-size: 0px; word-break: break-word; border-collapse: c=
+ollapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; font-weight: inherit=
+; line-height: inherit; letter-spacing: inherit; color: inherit; margin: 0;=
+"><div style=3D"font-family: Helvetica,Arial,sans-serif; font-size: 18px; f=
+ont-weight: 400; letter-spacing: 0; line-height: 28px; color: #0f1114;" ali=
+gn=3D"left">=0A<strong>Digital Education Development Centre</strong>'s Lear=
+ning Team partnered with Coursera, the global online learning platform, so =
+that you can learn new, job-relevant skills to advance your career. Access =
+thousands of courses from top universities and industry leaders. Learn at y=
+our own pace, discover new topics, and earn recognized certificates to show=
+case your skills.</div></td></tr>=0A<tr><td class=3D"cmds-spacer-4" style=
+=3D"font-size: 0px; word-break: break-word; border-collapse: collapse; mso-=
+table-lspace: 0pt; mso-table-rspace: 0pt;"><div style=3D"height: 16px; line=
+-height: 16px;">=E2=80=8A</div></td></tr>=0A<tr><td align=3D"left" vertical=
+-align=3D"middle" class=3D"cmds-button" style=3D"font-size: 0px; word-break=
+: break-word; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-r=
+space: 0pt; padding: 0;"><table border=3D"0" cellpadding=3D"0" cellspacing=
+=3D"0" role=3D"presentation" style=3D"border-collapse: separate; line-heigh=
+t: 100%; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td alig=
+n=3D"center" bgcolor=3D"#0056d2" role=3D"presentation" style=3D"border-radi=
+us: 4px; cursor: auto; height: 48px; mso-padding-alt: 12px 24px; border-col=
+lapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-style=
+: none;" valign=3D"middle"><a href=3D"https://link.coursera.org/f/a/lvNCZPV=
+PMYr98BLvoVjpPw~~/AAQRxRA~/rW9xdt3A8gjUz2X5MzQSXxTJF3I719QNOdnqe6gkQBWyDBJt=
+2EeEkcJtasgTOrNM48F8LJq8dPe6ZFCb-9odkWlh9pIchITGfnQzNgrhNKzlBy_xgVpmiE8VPZG=
+ut8nhfBomCEBuLKCqFH3Utq2eeXRl01He2v6_XS6iKw0IVYwiDVO8nxz7sB-Qoc2JL5gBQn4MDD=
+QqNJU3dlNy0_nIaPivh9B_fbLu71hroxOYmyFtGNA822urEimAfXmiLDEhYI9DfT0wTzm8ncZfX=
+5CI10cKJYWNMJJ6nPsiErFAMoxnaElclihJQ7XT70k_GA2Klcqp7TtykipueM6yOW1fxS6o3iSO=
+V4SRwCNypEPmWq1WQFBFjixZhubjJqUb9AlARzZtrINbZzE1o0OzFjCGxoa2blSN4jsQMRC1fb0=
+F6GvXBYmsPjW4v5pBKBIipp_cRgzcQNOnqglWfMvQbneU7xiKkESm1NCrSio5VcEi7TMCX983qR=
+yOzE--L0aSzV8lvQBBcS3WyCRKCe8PVDwsinza4mRMyfHcBQurAZWuKdJra1X2vsr2EAW1bsIJu=
+gSfZl52Nb5SwQQNnWtP8apKVJH3e4v2T1VlJLwIYNJs5pWF1afaHrpy0EgBxhX30SV2fynqo0bD=
+t5jHvLYvVW-EWw~~" style=3D"display: inline-block; background-color: #0056d2=
+; color: #fff; font-family: Helvetica,Arial,sans-serif; font-size: 14px; fo=
+nt-weight: 700; line-height: 22px; letter-spacing: .005em; text-decoration:=
+ none; text-transform: none; mso-padding-alt: 0px; border-radius: 4px; marg=
+in: 0; padding: 12px 24px;" target=3D"_blank">Join now</a></td></tr></tbody=
+></table></td></tr>=0A</tbody></table></td></tr></tbody></table></div>=0A<!=
+--[if mso | IE]></td></tr></table><![endif]-->=0A</td></tr></tbody></table>=
+</div>=0A<!--[if mso | IE]></td></tr></table></td></tr></table><![endif]-->=
+=0A</td></tr></tbody></table></div>=0A<!--[if mso | IE]></td></tr></table><=
+![endif]-->=0A</div>=0A<div class=3D"cmds-base-wrapper-container" style=3D"=
+container-type: inline-size;">=0A<!--[if mso | IE]><table align=3D"center" =
+border=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"cmds-base-wrapper=
+-outlook" role=3D"presentation" style=3D"width:700px;" width=3D"700" ><tr><=
+td style=3D"line-height:0px;font-size:0px;mso-line-height-rule:exactly;"><!=
+[endif]--><div class=3D"cmds-base-wrapper" style=3D"max-width: 700px; margi=
+n: 0 auto;"><table align=3D"center" border=3D"0" cellpadding=3D"0" cellspac=
+ing=3D"0" role=3D"presentation" style=3D"width: 100%; border-collapse: coll=
+apse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=
+=3D"direction: ltr; font-size: 0px; border-collapse: collapse; mso-table-ls=
+pace: 0pt; mso-table-rspace: 0pt; padding: 20px 0;" align=3D"center">=0A<!-=
+-[if mso | IE]><table role=3D"presentation" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0"><![endif]--> <!--[if mso | IE]></table><![endif]-->=0A</t=
+d></tr></tbody></table></div>=0A<!--[if mso | IE]></td></tr></table><![endi=
+f]-->=0A</div>=0A<div class=3D"cmds-base-wrapper-container" style=3D"contai=
+ner-type: inline-size;">=0A<!--[if mso | IE]><table align=3D"center" border=
+=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"cmds-base-wrapper-outlo=
+ok" role=3D"presentation" style=3D"width:700px;" width=3D"700" ><tr><td sty=
+le=3D"line-height:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif=
+]--><div class=3D"cmds-base-wrapper" style=3D"max-width: 700px; margin: 0 a=
+uto;"><table align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D=
+"0" role=3D"presentation" style=3D"width: 100%; border-collapse: collapse; =
+mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=3D"dire=
+ction: ltr; font-size: 0px; border-collapse: collapse; mso-table-lspace: 0p=
+t; mso-table-rspace: 0pt; padding: 20px 0;" align=3D"center">=0A<!--[if mso=
+ | IE]><table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspac=
+ing=3D"0"><tr><td class=3D"" width=3D"700px" ><table align=3D"center" borde=
+r=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"" role=3D"presentation=
+" style=3D"width:700px;" width=3D"700" ><tr><td style=3D"line-height:0px;fo=
+nt-size:0px;mso-line-height-rule:exactly;"><![endif]--><div style=3D"max-wi=
+dth: 700px; margin: 0 auto;"><table align=3D"center" border=3D"0" cellpaddi=
+ng=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"width: 100%; bord=
+er-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbod=
+y><tr><td style=3D"direction: ltr; font-size: 0px; border-collapse: collaps=
+e; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padding: 0;" align=3D"cent=
+er">=0A<!--[if mso | IE]><table role=3D"presentation" border=3D"0" cellpadd=
+ing=3D"0" cellspacing=3D"0"><tr><td class=3D"" style=3D"vertical-align:top;=
+width:700px;" ><![endif]--><div class=3D"mj-column-per-100 mj-outlook-group=
+-fix" style=3D"font-size: 0px; direction: ltr; display: inline-block; verti=
+cal-align: top; width: 100%;" align=3D"left"><table border=3D"0" cellpaddin=
+g=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"vertical-align: to=
+p; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;=
+" width=3D"100%"><tbody><tr><td class=3D"cmds-divider-horizontal-1" style=
+=3D"font-size: 0px; word-break: break-word; border-collapse: collapse; mso-=
+table-lspace: 0pt; mso-table-rspace: 0pt; padding: 0;">=0A<p style=3D"borde=
+r-top-width: 1px; border-top-color: #e8eef7; border-top-style: solid; font-=
+size: 1px; width: 100%; display: block; margin: 0 auto;"></p>=0A<!--[if mso=
+ | IE]><table align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=
+=3D"0" style=3D"border-top:solid 1px #e8eef7;font-size:1px;margin:0px auto;=
+width:700px;" role=3D"presentation" width=3D"700px" ><tr><td style=3D"heigh=
+t:0;line-height:0;"> &nbsp;=0A</td></tr></table><![endif]-->=0A</td></tr></=
+tbody></table></div>=0A<!--[if mso | IE]></td></tr></table><![endif]-->=0A<=
+/td></tr></tbody></table></div>=0A<!--[if mso | IE]></td></tr></table></td>=
+</tr></table><![endif]-->=0A</td></tr></tbody></table></div>=0A<!--[if mso =
+| IE]></td></tr></table><![endif]-->=0A</div>=0A<div class=3D"cmds-base-wra=
+pper-container" style=3D"container-type: inline-size;">=0A<!--[if mso | IE]=
+><table align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" c=
+lass=3D"cmds-base-wrapper-outlook" role=3D"presentation" style=3D"width:700=
+px;" width=3D"700" ><tr><td style=3D"line-height:0px;font-size:0px;mso-line=
+-height-rule:exactly;"><![endif]--><div class=3D"cmds-base-wrapper" style=
+=3D"max-width: 700px; margin: 0 auto;"><table align=3D"center" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"width: =
+100%; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0=
+pt;"><tbody><tr><td style=3D"direction: ltr; font-size: 0px; border-collaps=
+e: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padding: 20px 0;=
+" align=3D"center">=0A<!--[if mso | IE]><table role=3D"presentation" border=
+=3D"0" cellpadding=3D"0" cellspacing=3D"0"><![endif]--> <!--[if mso | IE]><=
+tr><td class=3D"" width=3D"700px" ><table align=3D"center" border=3D"0" cel=
+lpadding=3D"0" cellspacing=3D"0" class=3D"" role=3D"presentation" style=3D"=
+width:700px;" width=3D"700" ><tr><td style=3D"line-height:0px;font-size:0px=
+;mso-line-height-rule:exactly;"><![endif]--><div style=3D"max-width: 700px;=
+ margin: 0 auto;"><table align=3D"center" border=3D"0" cellpadding=3D"0" ce=
+llspacing=3D"0" role=3D"presentation" style=3D"width: 100%; border-collapse=
+: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td s=
+tyle=3D"direction: ltr; font-size: 0px; border-collapse: collapse; mso-tabl=
+e-lspace: 0pt; mso-table-rspace: 0pt; padding: 0;" align=3D"center">=0A<!--=
+[if mso | IE]><table role=3D"presentation" border=3D"0" cellpadding=3D"0" c=
+ellspacing=3D"0"><tr><td class=3D"" style=3D"vertical-align:top;width:700px=
+;" ><![endif]--><div class=3D"mj-column-per-100 mj-outlook-group-fix" style=
+=3D"font-size: 0px; direction: ltr; display: inline-block; vertical-align: =
+top; width: 100%;" align=3D"left"><table border=3D"0" cellpadding=3D"0" cel=
+lspacing=3D"0" role=3D"presentation" style=3D"vertical-align: top; border-c=
+ollapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;" width=3D"=
+100%"><tbody>=0A<tr><td align=3D"left" class=3D"cmds-typography cmds-typogr=
+aphy-subtitleLarge" style=3D"font-size: 0px; word-break: break-word; border=
+-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; font-wei=
+ght: inherit; line-height: inherit; letter-spacing: inherit; color: inherit=
+; margin: 0;"><div style=3D"font-family: Helvetica,Arial,sans-serif; font-s=
+ize: 22px; font-weight: 700; letter-spacing: 0; line-height: 30px; color: #=
+0f1114;" align=3D"left">With Coursera, you can learn</div></td></tr>=0A<tr>=
+<td class=3D"cmds-spacer-7" style=3D"font-size: 0px; word-break: break-word=
+; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"=
+><div style=3D"height: 24px; line-height: 24px;">=E2=80=8A</div></td></tr>=
+=0A</tbody></table></div>=0A<!--[if mso | IE]></td></tr></table><![endif]--=
+>=0A</td></tr></tbody></table></div>=0A<!--[if mso | IE]></td></tr></table>=
+</td></tr><tr><td class=3D"" width=3D"700px" ><table align=3D"center" borde=
+r=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"" role=3D"presentation=
+" style=3D"width:700px;" width=3D"700" ><tr><td style=3D"line-height:0px;fo=
+nt-size:0px;mso-line-height-rule:exactly;"><![endif]--><div style=3D"max-wi=
+dth: 700px; margin: 0 auto;"><table align=3D"center" border=3D"0" cellpaddi=
+ng=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"width: 100%; bord=
+er-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbod=
+y><tr><td style=3D"direction: ltr; font-size: 0px; border-collapse: collaps=
+e; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padding: 0;" align=3D"left=
+">=0A<!--[if mso | IE]><table role=3D"presentation" border=3D"0" cellpaddin=
+g=3D"0" cellspacing=3D"0"><tr><td class=3D"" style=3D"vertical-align:top;wi=
+dth:56px;" ><![endif]--><div class=3D"mj-column-px-56 mj-outlook-group-fix"=
+ style=3D"font-size: 0px; direction: ltr; display: inline-block; vertical-a=
+lign: top; width: 100%;" align=3D"left"><table border=3D"0" cellpadding=3D"=
+0" cellspacing=3D"0" role=3D"presentation" width=3D"100%" style=3D"border-c=
+ollapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><t=
+r><td style=3D"border-collapse: collapse; mso-table-lspace: 0pt; mso-table-=
+rspace: 0pt; padding: 0;" valign=3D"top"><table border=3D"0" cellpadding=3D=
+"0" cellspacing=3D"0" role=3D"presentation" width=3D"100%" style=3D"border-=
+collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><=
+tr><td align=3D"center" style=3D"font-size: 0px; word-break: break-word; bo=
+rder-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padd=
+ing: 0;"><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"pr=
+esentation" style=3D"border-collapse: collapse; border-spacing: 0px; mso-ta=
+ble-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=3D"width: 40p=
+x; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;=
+"><img alt=3D"Clock icon" height=3D"auto" src=3D"https://d3njjcbhbojbot.clo=
+udfront.net/api/utilities/v1/imageproxy/https://coursera_assets.s3.amazonaw=
+s.com/enterprise/clock.png" style=3D"display: block; outline: 0; text-decor=
+ation: none; height: auto; width: 100%; font-size: 13px; line-height: 100%;=
+ -ms-interpolation-mode: bicubic; border-width: 0;" width=3D"40"></td></tr>=
+</tbody></table></td></tr></tbody></table></td></tr></tbody></table></div>=
+=0A<!--[if mso | IE]></td><td class=3D"" style=3D"vertical-align:top;width:=
+350px;" ><![endif]--><div class=3D"mj-column-per-50 mj-outlook-group-fix" s=
+tyle=3D"font-size: 0px; direction: ltr; display: inline-block; vertical-ali=
+gn: top; width: 100%;" align=3D"left"><table border=3D"0" cellpadding=3D"0"=
+ cellspacing=3D"0" role=3D"presentation" width=3D"100%" style=3D"border-col=
+lapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr>=
+<td style=3D"border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rs=
+pace: 0pt; padding: 0;" valign=3D"top"><table border=3D"0" cellpadding=3D"0=
+" cellspacing=3D"0" role=3D"presentation" width=3D"100%" style=3D"border-co=
+llapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody>=0A=
+<tr><td align=3D"left" class=3D"cmds-typography cmds-typography-subtitleMed=
+ium" style=3D"font-size: 0px; word-break: break-word; border-collapse: coll=
+apse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; font-weight: inherit; l=
+ine-height: inherit; letter-spacing: inherit; color: inherit; margin: 0;"><=
+div style=3D"font-family: Helvetica,Arial,sans-serif; font-size: 18px; font=
+-weight: 700; letter-spacing: 0; line-height: 28px; color: #0f1114;" align=
+=3D"left">Learn at your own pace</div></td></tr>=0A<tr><td align=3D"left" c=
+lass=3D"cmds-typography cmds-typography-bodySecondary" style=3D"font-size: =
+0px; word-break: break-word; border-collapse: collapse; mso-table-lspace: 0=
+pt; mso-table-rspace: 0pt; font-weight: inherit; line-height: inherit; lett=
+er-spacing: inherit; color: inherit; margin: 0;"><div style=3D"font-family:=
+ Helvetica,Arial,sans-serif; font-size: 15px; font-weight: 400; letter-spac=
+ing: 0; line-height: 24px; color: #0f1114;" align=3D"left">Whenever you wan=
+t, wherever you want</div></td></tr>=0A</tbody></table></td></tr></tbody></=
+table></div>=0A<!--[if mso | IE]></td></tr></table><![endif]-->=0A</td></tr=
+></tbody></table></div>=0A<!--[if mso | IE]></td></tr></table></td></tr><tr=
+><td class=3D"" width=3D"700px" ><table align=3D"center" border=3D"0" cellp=
+adding=3D"0" cellspacing=3D"0" class=3D"" role=3D"presentation" style=3D"wi=
+dth:700px;" width=3D"700" ><tr><td style=3D"line-height:0px;font-size:0px;m=
+so-line-height-rule:exactly;"><![endif]--><div style=3D"max-width: 700px; m=
+argin: 0 auto;"><table align=3D"center" border=3D"0" cellpadding=3D"0" cell=
+spacing=3D"0" role=3D"presentation" style=3D"width: 100%; border-collapse: =
+collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td sty=
+le=3D"direction: ltr; font-size: 0px; border-collapse: collapse; mso-table-=
+lspace: 0pt; mso-table-rspace: 0pt; padding: 0;" align=3D"center">=0A<!--[i=
+f mso | IE]><table role=3D"presentation" border=3D"0" cellpadding=3D"0" cel=
+lspacing=3D"0"><tr><td class=3D"" style=3D"vertical-align:top;width:700px;"=
+ ><![endif]--><div class=3D"mj-column-per-100 mj-outlook-group-fix" style=
+=3D"font-size: 0px; direction: ltr; display: inline-block; vertical-align: =
+top; width: 100%;" align=3D"left"><table border=3D"0" cellpadding=3D"0" cel=
+lspacing=3D"0" role=3D"presentation" style=3D"vertical-align: top; border-c=
+ollapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;" width=3D"=
+100%"><tbody><tr><td class=3D"cmds-spacer-8" style=3D"font-size: 0px; word-=
+break: break-word; border-collapse: collapse; mso-table-lspace: 0pt; mso-ta=
+ble-rspace: 0pt;"><div style=3D"height: 24px; line-height: 24px;">=E2=80=8A=
+</div></td></tr></tbody></table></div>=0A<!--[if mso | IE]></td></tr></tabl=
+e><![endif]-->=0A</td></tr></tbody></table></div>=0A<!--[if mso | IE]></td>=
+</tr></table></td></tr><tr><td class=3D"" width=3D"700px" ><table align=3D"=
+center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"" role=3D=
+"presentation" style=3D"width:700px;" width=3D"700" ><tr><td style=3D"line-=
+height:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif]--><div st=
+yle=3D"max-width: 700px; margin: 0 auto;"><table align=3D"center" border=3D=
+"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"widt=
+h: 100%; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace=
+: 0pt;"><tbody><tr><td style=3D"direction: ltr; font-size: 0px; border-coll=
+apse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padding: 0;" =
+align=3D"left">=0A<!--[if mso | IE]><table role=3D"presentation" border=3D"=
+0" cellpadding=3D"0" cellspacing=3D"0"><tr><td class=3D"" style=3D"vertical=
+-align:top;width:56px;" ><![endif]--><div class=3D"mj-column-px-56 mj-outlo=
+ok-group-fix" style=3D"font-size: 0px; direction: ltr; display: inline-bloc=
+k; vertical-align: top; width: 100%;" align=3D"left"><table border=3D"0" ce=
+llpadding=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D"100%" styl=
+e=3D"border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0p=
+t;"><tbody><tr><td style=3D"border-collapse: collapse; mso-table-lspace: 0p=
+t; mso-table-rspace: 0pt; padding: 0;" valign=3D"top"><table border=3D"0" c=
+ellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D"100%" sty=
+le=3D"border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0=
+pt;"><tbody><tr><td align=3D"center" style=3D"font-size: 0px; word-break: b=
+reak-word; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspa=
+ce: 0pt; padding: 0;"><table border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" role=3D"presentation" style=3D"border-collapse: collapse; border-spacing=
+: 0px; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=
+=3D"width: 40px; border-collapse: collapse; mso-table-lspace: 0pt; mso-tabl=
+e-rspace: 0pt;"><img alt=3D"Institution icon" height=3D"auto" src=3D"https:=
+//d3njjcbhbojbot.cloudfront.net/api/utilities/v1/imageproxy/https://courser=
+a_assets.s3.amazonaws.com/enterprise/university.png" style=3D"display: bloc=
+k; outline: 0; text-decoration: none; height: auto; width: 100%; font-size:=
+ 13px; line-height: 100%; -ms-interpolation-mode: bicubic; border-width: 0;=
+" width=3D"40"></td></tr></tbody></table></td></tr></tbody></table></td></t=
+r></tbody></table></div>=0A<!--[if mso | IE]></td><td class=3D"" style=3D"v=
+ertical-align:top;width:350px;" ><![endif]--><div class=3D"mj-column-per-50=
+ mj-outlook-group-fix" style=3D"font-size: 0px; direction: ltr; display: in=
+line-block; vertical-align: top; width: 100%;" align=3D"left"><table border=
+=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D"1=
+00%" style=3D"border-collapse: collapse; mso-table-lspace: 0pt; mso-table-r=
+space: 0pt;"><tbody><tr><td style=3D"border-collapse: collapse; mso-table-l=
+space: 0pt; mso-table-rspace: 0pt; padding: 0;" valign=3D"top"><table borde=
+r=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D"=
+100%" style=3D"border-collapse: collapse; mso-table-lspace: 0pt; mso-table-=
+rspace: 0pt;"><tbody>=0A<tr><td align=3D"left" class=3D"cmds-typography cmd=
+s-typography-subtitleMedium" style=3D"font-size: 0px; word-break: break-wor=
+d; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;=
+ font-weight: inherit; line-height: inherit; letter-spacing: inherit; color=
+: inherit; margin: 0;"><div style=3D"font-family: Helvetica,Arial,sans-seri=
+f; font-size: 18px; font-weight: 700; letter-spacing: 0; line-height: 28px;=
+ color: #0f1114;" align=3D"left">From the best</div></td></tr>=0A<tr><td al=
+ign=3D"left" class=3D"cmds-typography cmds-typography-bodySecondary" style=
+=3D"font-size: 0px; word-break: break-word; border-collapse: collapse; mso-=
+table-lspace: 0pt; mso-table-rspace: 0pt; font-weight: inherit; line-height=
+: inherit; letter-spacing: inherit; color: inherit; margin: 0;"><div style=
+=3D"font-family: Helvetica,Arial,sans-serif; font-size: 15px; font-weight: =
+400; letter-spacing: 0; line-height: 24px; color: #0f1114;" align=3D"left">=
+With online courses from the world's top universities and companies</div></=
+td></tr>=0A</tbody></table></td></tr></tbody></table></div>=0A<!--[if mso |=
+ IE]></td></tr></table><![endif]-->=0A</td></tr></tbody></table></div>=0A<!=
+--[if mso | IE]></td></tr></table></td></tr><tr><td class=3D"" width=3D"700=
+px" ><table align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" class=3D"" role=3D"presentation" style=3D"width:700px;" width=3D"700" ><=
+tr><td style=3D"line-height:0px;font-size:0px;mso-line-height-rule:exactly;=
+"><![endif]--><div style=3D"max-width: 700px; margin: 0 auto;"><table align=
+=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presen=
+tation" style=3D"width: 100%; border-collapse: collapse; mso-table-lspace: =
+0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=3D"direction: ltr; font-s=
+ize: 0px; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspac=
+e: 0pt; padding: 0;" align=3D"center">=0A<!--[if mso | IE]><table role=3D"p=
+resentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"0"><tr><td class=
+=3D"" style=3D"vertical-align:top;width:700px;" ><![endif]--><div class=3D"=
+mj-column-per-100 mj-outlook-group-fix" style=3D"font-size: 0px; direction:=
+ ltr; display: inline-block; vertical-align: top; width: 100%;" align=3D"le=
+ft"><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"present=
+ation" style=3D"vertical-align: top; border-collapse: collapse; mso-table-l=
+space: 0pt; mso-table-rspace: 0pt;" width=3D"100%"><tbody><tr><td class=3D"=
+cmds-spacer-9" style=3D"font-size: 0px; word-break: break-word; border-coll=
+apse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><div style=
+=3D"height: 24px; line-height: 24px;">=E2=80=8A</div></td></tr></tbody></ta=
+ble></div>=0A<!--[if mso | IE]></td></tr></table><![endif]-->=0A</td></tr><=
+/tbody></table></div>=0A<!--[if mso | IE]></td></tr></table></td></tr><tr><=
+td class=3D"" width=3D"700px" ><table align=3D"center" border=3D"0" cellpad=
+ding=3D"0" cellspacing=3D"0" class=3D"" role=3D"presentation" style=3D"widt=
+h:700px;" width=3D"700" ><tr><td style=3D"line-height:0px;font-size:0px;mso=
+-line-height-rule:exactly;"><![endif]--><div style=3D"max-width: 700px; mar=
+gin: 0 auto;"><table align=3D"center" border=3D"0" cellpadding=3D"0" cellsp=
+acing=3D"0" role=3D"presentation" style=3D"width: 100%; border-collapse: co=
+llapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=
+=3D"direction: ltr; font-size: 0px; border-collapse: collapse; mso-table-ls=
+pace: 0pt; mso-table-rspace: 0pt; padding: 0;" align=3D"left">=0A<!--[if ms=
+o | IE]><table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspa=
+cing=3D"0"><tr><td class=3D"" style=3D"vertical-align:top;width:56px;" ><![=
+endif]--><div class=3D"mj-column-px-56 mj-outlook-group-fix" style=3D"font-=
+size: 0px; direction: ltr; display: inline-block; vertical-align: top; widt=
+h: 100%;" align=3D"left"><table border=3D"0" cellpadding=3D"0" cellspacing=
+=3D"0" role=3D"presentation" width=3D"100%" style=3D"border-collapse: colla=
+pse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=3D=
+"border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; p=
+adding: 0;" valign=3D"top"><table border=3D"0" cellpadding=3D"0" cellspacin=
+g=3D"0" role=3D"presentation" width=3D"100%" style=3D"border-collapse: coll=
+apse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td align=
+=3D"center" style=3D"font-size: 0px; word-break: break-word; border-collaps=
+e: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padding: 0;"><ta=
+ble border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" =
+style=3D"border-collapse: collapse; border-spacing: 0px; mso-table-lspace: =
+0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=3D"width: 40px; border-co=
+llapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><img alt=
+=3D"Certificate icon" height=3D"auto" src=3D"https://d3njjcbhbojbot.cloudfr=
+ont.net/api/utilities/v1/imageproxy/https://coursera_assets.s3.amazonaws.co=
+m/enterprise/certificate.png" style=3D"display: block; outline: 0; text-dec=
+oration: none; height: auto; width: 100%; font-size: 13px; line-height: 100=
+%; -ms-interpolation-mode: bicubic; border-width: 0;" width=3D"40"></td></t=
+r></tbody></table></td></tr></tbody></table></td></tr></tbody></table></div=
+>=0A<!--[if mso | IE]></td><td class=3D"" style=3D"vertical-align:top;width=
+:350px;" ><![endif]--><div class=3D"mj-column-per-50 mj-outlook-group-fix" =
+style=3D"font-size: 0px; direction: ltr; display: inline-block; vertical-al=
+ign: top; width: 100%;" align=3D"left"><table border=3D"0" cellpadding=3D"0=
+" cellspacing=3D"0" role=3D"presentation" width=3D"100%" style=3D"border-co=
+llapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr=
+><td style=3D"border-collapse: collapse; mso-table-lspace: 0pt; mso-table-r=
+space: 0pt; padding: 0;" valign=3D"top"><table border=3D"0" cellpadding=3D"=
+0" cellspacing=3D"0" role=3D"presentation" width=3D"100%" style=3D"border-c=
+ollapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody>=
+=0A<tr><td align=3D"left" class=3D"cmds-typography cmds-typography-subtitle=
+Medium" style=3D"font-size: 0px; word-break: break-word; border-collapse: c=
+ollapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; font-weight: inherit=
+; line-height: inherit; letter-spacing: inherit; color: inherit; margin: 0;=
+"><div style=3D"font-family: Helvetica,Arial,sans-serif; font-size: 18px; f=
+ont-weight: 700; letter-spacing: 0; line-height: 28px; color: #0f1114;" ali=
+gn=3D"left">And share your Certificate</div></td></tr>=0A<tr><td align=3D"l=
+eft" class=3D"cmds-typography cmds-typography-bodySecondary" style=3D"font-=
+size: 0px; word-break: break-word; border-collapse: collapse; mso-table-lsp=
+ace: 0pt; mso-table-rspace: 0pt; font-weight: inherit; line-height: inherit=
+; letter-spacing: inherit; color: inherit; margin: 0;"><div style=3D"font-f=
+amily: Helvetica,Arial,sans-serif; font-size: 15px; font-weight: 400; lette=
+r-spacing: 0; line-height: 24px; color: #0f1114;" align=3D"left">Apply what=
+ you've learned and connect course certificates to your LinkedIn profile</d=
+iv></td></tr>=0A</tbody></table></td></tr></tbody></table></div>=0A<!--[if =
+mso | IE]></td></tr></table><![endif]-->=0A</td></tr></tbody></table></div>=
+=0A<!--[if mso | IE]></td></tr></table></td></tr><![endif]--> <!--[if mso |=
+ IE]></table><![endif]-->=0A</td></tr></tbody></table></div>=0A<!--[if mso =
+| IE]></td></tr></table><![endif]-->=0A</div>=0A<div class=3D"cmds-base-wra=
+pper-container" style=3D"container-type: inline-size;">=0A<!--[if mso | IE]=
+><table align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" c=
+lass=3D"cmds-base-wrapper-outlook" role=3D"presentation" style=3D"width:700=
+px;" width=3D"700" ><tr><td style=3D"line-height:0px;font-size:0px;mso-line=
+-height-rule:exactly;"><![endif]--><div class=3D"cmds-base-wrapper" style=
+=3D"max-width: 700px; margin: 0 auto;"><table align=3D"center" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"width: =
+100%; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0=
+pt;"><tbody><tr><td style=3D"direction: ltr; font-size: 0px; border-collaps=
+e: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padding: 20px 0;=
+" align=3D"center">=0A<!--[if mso | IE]><table role=3D"presentation" border=
+=3D"0" cellpadding=3D"0" cellspacing=3D"0"><![endif]--> <!--[if mso | IE]><=
+tr><td class=3D"" width=3D"700px" ><table align=3D"center" border=3D"0" cel=
+lpadding=3D"0" cellspacing=3D"0" class=3D"" role=3D"presentation" style=3D"=
+width:700px;" width=3D"700" ><tr><td style=3D"line-height:0px;font-size:0px=
+;mso-line-height-rule:exactly;"><![endif]--><div style=3D"max-width: 700px;=
+ margin: 0 auto;"><table align=3D"center" border=3D"0" cellpadding=3D"0" ce=
+llspacing=3D"0" role=3D"presentation" style=3D"width: 100%; border-collapse=
+: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td s=
+tyle=3D"direction: ltr; font-size: 0px; border-collapse: collapse; mso-tabl=
+e-lspace: 0pt; mso-table-rspace: 0pt; padding: 0;" align=3D"center">=0A<!--=
+[if mso | IE]><table role=3D"presentation" border=3D"0" cellpadding=3D"0" c=
+ellspacing=3D"0"><tr><td class=3D"" style=3D"vertical-align:top;width:700px=
+;" ><![endif]--><div class=3D"mj-column-per-100 mj-outlook-group-fix" style=
+=3D"font-size: 0px; direction: ltr; display: inline-block; vertical-align: =
+top; width: 100%;" align=3D"left"><table border=3D"0" cellpadding=3D"0" cel=
+lspacing=3D"0" role=3D"presentation" width=3D"100%" style=3D"border-collaps=
+e: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td =
+style=3D"border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace=
+: 0pt; padding: 0;" valign=3D"top"><table border=3D"0" cellpadding=3D"0" ce=
+llspacing=3D"0" role=3D"presentation" width=3D"100%" style=3D"border-collap=
+se: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody>=0A<tr>=
+<td align=3D"left" class=3D"cmds-typography cmds-typography-subtitleLarge" =
+style=3D"font-size: 0px; word-break: break-word; border-collapse: collapse;=
+ mso-table-lspace: 0pt; mso-table-rspace: 0pt; font-weight: inherit; line-h=
+eight: inherit; letter-spacing: inherit; color: inherit; margin: 0;"><div s=
+tyle=3D"font-family: Helvetica,Arial,sans-serif; font-size: 22px; font-weig=
+ht: 700; letter-spacing: 0; line-height: 30px; color: #0f1114;" align=3D"le=
+ft">Getting started is easy</div></td></tr>=0A<tr><td class=3D"cmds-spacer-=
+10" style=3D"font-size: 0px; word-break: break-word; border-collapse: colla=
+pse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><div style=3D"height: 1=
+6px; line-height: 16px;">=E2=80=8A</div></td></tr>=0A<tr><td align=3D"left"=
+ class=3D"cmds-typography cmds-typography-bodySecondary" style=3D"font-size=
+: 0px; word-break: break-word; border-collapse: collapse; mso-table-lspace:=
+ 0pt; mso-table-rspace: 0pt; font-weight: inherit; line-height: inherit; le=
+tter-spacing: inherit; color: inherit; margin: 0;"><div style=3D"font-famil=
+y: Helvetica,Arial,sans-serif; font-size: 15px; font-weight: 400; letter-sp=
+acing: 0; line-height: 24px; color: #0f1114;" align=3D"left">Once you've jo=
+ined, browse the platform and enroll in courses that match your interests a=
+nd goals.</div></td></tr>=0A<tr><td class=3D"cmds-spacer-11" style=3D"font-=
+size: 0px; word-break: break-word; border-collapse: collapse; mso-table-lsp=
+ace: 0pt; mso-table-rspace: 0pt;"><div style=3D"height: 16px; line-height: =
+16px;">=E2=80=8A</div></td></tr>=0A<tr><td align=3D"left" vertical-align=3D=
+"middle" class=3D"cmds-button" style=3D"font-size: 0px; word-break: break-w=
+ord; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0p=
+t; padding: 0;"><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" rol=
+e=3D"presentation" style=3D"border-collapse: separate; line-height: 100%; m=
+so-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td align=3D"cente=
+r" bgcolor=3D"#0056d2" role=3D"presentation" style=3D"border-radius: 4px; c=
+ursor: auto; height: 48px; mso-padding-alt: 12px 24px; border-collapse: col=
+lapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-style: none;" v=
+align=3D"middle"><a href=3D"https://link.coursera.org/f/a/trhjzneSZuLYYH7aI=
+y7-kw~~/AAQRxRA~/g5-jw1MnWwJbwZiKtUVju-HHjP-FDOi1CrpJcwSAcMMz00rAmcMXOSwjJV=
+y8tDwY28d3r-xJmxykaZ2XjTbhmZhPt6Fw_rVg_Quk99mOkun0ZpDrKqvqabfhN02DpJrNQf6cg=
+Uijf2nzxuepPDCkAgrfXl51bzb170dNWUwqtyNI3JwB-bxvLSUlNXKQ8GC_JJY6YcQ0PfywrAbt=
+5vR_MyeFZ35DhaDgk6NJa_Ra-CDuRzIirqvKJL48JHtsOleZmn-wANDf-3v5ceDxBcE597m7yUn=
+5X0Q-48u1YFr-YRg~" style=3D"display: inline-block; background-color: #0056d=
+2; color: #fff; font-family: Helvetica,Arial,sans-serif; font-size: 14px; f=
+ont-weight: 700; line-height: 22px; letter-spacing: .005em; text-decoration=
+: none; text-transform: none; mso-padding-alt: 0px; border-radius: 4px; mar=
+gin: 0; padding: 12px 24px;" target=3D"_blank">Start learning</a></td></tr>=
+</tbody></table></td></tr>=0A</tbody></table></td></tr></tbody></table></di=
+v>=0A<!--[if mso | IE]></td></tr></table><![endif]-->=0A</td></tr></tbody><=
+/table></div>=0A<!--[if mso | IE]></td></tr></table></td></tr><![endif]--> =
+<!--[if mso | IE]><tr><td class=3D"" width=3D"700px" ><table align=3D"cente=
+r" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"" role=3D"pres=
+entation" style=3D"width:700px;" width=3D"700" ><tr><td style=3D"line-heigh=
+t:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif]--><div style=
+=3D"max-width: 700px; margin: 0 auto;"><table align=3D"center" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"width: =
+100%; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0=
+pt;"><tbody><tr><td style=3D"direction: ltr; font-size: 0px; border-collaps=
+e: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padding: 0;" ali=
+gn=3D"center">=0A<!--[if mso | IE]><table role=3D"presentation" border=3D"0=
+" cellpadding=3D"0" cellspacing=3D"0"><tr><td class=3D"" style=3D"vertical-=
+align:top;width:700px;" ><![endif]--><div class=3D"mj-column-per-100 mj-out=
+look-group-fix" style=3D"font-size: 0px; direction: ltr; display: inline-bl=
+ock; vertical-align: top; width: 100%;" align=3D"left"><table border=3D"0" =
+cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"vertical=
+-align: top; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rs=
+pace: 0pt;" width=3D"100%"><tbody><tr><td class=3D"cmds-spacer-12" style=3D=
+"font-size: 0px; word-break: break-word; border-collapse: collapse; mso-tab=
+le-lspace: 0pt; mso-table-rspace: 0pt;"><div style=3D"height: 24px; line-he=
+ight: 24px;">=E2=80=8A</div></td></tr></tbody></table></div>=0A<!--[if mso =
+| IE]></td></tr></table><![endif]-->=0A</td></tr></tbody></table></div>=0A<=
+!--[if mso | IE]></td></tr></table></td></tr></table><![endif]-->=0A</td></=
+tr></tbody></table></div>=0A<!--[if mso | IE]></td></tr></table><![endif]--=
+>=0A</div>=0A<div class=3D"cmds-base-wrapper-container" style=3D"container-=
+type: inline-size;">=0A<!--[if mso | IE]><table align=3D"center" border=3D"=
+0" cellpadding=3D"0" cellspacing=3D"0" class=3D"cmds-base-wrapper-outlook" =
+role=3D"presentation" style=3D"width:700px;" width=3D"700" ><tr><td style=
+=3D"line-height:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif]-=
+-><div class=3D"cmds-base-wrapper" style=3D"max-width: 700px; margin: 0 aut=
+o;"><table align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0=
+" role=3D"presentation" style=3D"width: 100%; border-collapse: collapse; ms=
+o-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=3D"direct=
+ion: ltr; font-size: 0px; border-collapse: collapse; mso-table-lspace: 0pt;=
+ mso-table-rspace: 0pt; padding: 20px 0;" align=3D"center">=0A<!--[if mso |=
+ IE]><table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacin=
+g=3D"0"><tr><td class=3D"" width=3D"700px" ><table align=3D"center" border=
+=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"" role=3D"presentation"=
+ style=3D"width:700px;" width=3D"700" ><tr><td style=3D"line-height:0px;fon=
+t-size:0px;mso-line-height-rule:exactly;"><![endif]--><div style=3D"max-wid=
+th: 700px; margin: 0 auto;"><table align=3D"center" border=3D"0" cellpaddin=
+g=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"width: 100%; borde=
+r-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody=
+><tr><td style=3D"direction: ltr; font-size: 0px; border-collapse: collapse=
+; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padding: 0;" align=3D"cente=
+r">=0A<!--[if mso | IE]><table role=3D"presentation" border=3D"0" cellpaddi=
+ng=3D"0" cellspacing=3D"0"><tr><td class=3D"" style=3D"vertical-align:top;w=
+idth:700px;" ><![endif]--><div class=3D"mj-column-per-100 mj-outlook-group-=
+fix" style=3D"font-size: 0px; direction: ltr; display: inline-block; vertic=
+al-align: top; width: 100%;" align=3D"left"><table border=3D"0" cellpadding=
+=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"vertical-align: top=
+; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"=
+ width=3D"100%"><tbody>=0A<tr><td class=3D"cmds-divider-horizontal-2" style=
+=3D"font-size: 0px; word-break: break-word; border-collapse: collapse; mso-=
+table-lspace: 0pt; mso-table-rspace: 0pt; padding: 0;">=0A<p style=3D"borde=
+r-top-width: 1px; border-top-color: #e8eef7; border-top-style: solid; font-=
+size: 1px; width: 100%; display: block; margin: 0 auto;"></p>=0A<!--[if mso=
+ | IE]><table align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=
+=3D"0" style=3D"border-top:solid 1px #e8eef7;font-size:1px;margin:0px auto;=
+width:700px;" role=3D"presentation" width=3D"700px" ><tr><td style=3D"heigh=
+t:0;line-height:0;"> &nbsp;=0A</td></tr></table><![endif]-->=0A</td></tr>=
+=0A<tr><td class=3D"cmds-spacer-13" style=3D"font-size: 0px; word-break: br=
+eak-word; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspac=
+e: 0pt;"><div style=3D"height: 48px; line-height: 48px;">=E2=80=8A</div></t=
+d></tr>=0A</tbody></table></div>=0A<!--[if mso | IE]></td></tr></table><![e=
+ndif]-->=0A</td></tr></tbody></table></div>=0A<!--[if mso | IE]></td></tr><=
+/table><table align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=
+=3D"0" class=3D"cmds-grid-outlook" role=3D"presentation" style=3D"width:700=
+px;" width=3D"700" ><tr><td style=3D"line-height:0px;font-size:0px;mso-line=
+-height-rule:exactly;"><![endif]--><div class=3D"cmds-grid" style=3D"border=
+-radius: 0; max-width: 700px; margin: 0 auto;"><table align=3D"center" bord=
+er=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D=
+"width: 100%; border-radius: 0; border-collapse: collapse; mso-table-lspace=
+: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=3D"direction: ltr; font=
+-size: 0px; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rsp=
+ace: 0pt; padding: 0;" align=3D"center">=0A<!--[if mso | IE]><table role=3D=
+"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"0"><tr><td cla=
+ss=3D"" style=3D"" ><![endif]--><div class=3D"mj-column-px-334 mj-outlook-g=
+roup-fix" style=3D"font-size: 0px; direction: ltr; display: inline-block; v=
+ertical-align: top; width: 100%;" align=3D"left"><table border=3D"0" cellpa=
+dding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"vertical-align=
+: top; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: =
+0pt;" width=3D"100%"><tbody>=0A<tr><td align=3D"left" style=3D"font-size: 0=
+px; word-break: break-word; border-collapse: collapse; mso-table-lspace: 0p=
+t; mso-table-rspace: 0pt; padding: 0;"><table border=3D"0" cellpadding=3D"0=
+" cellspacing=3D"0" role=3D"presentation" style=3D"border-collapse: collaps=
+e; border-spacing: 0px; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbo=
+dy><tr><td style=3D"width: 114px; border-collapse: collapse; mso-table-lspa=
+ce: 0pt; mso-table-rspace: 0pt;"><a href=3D"https://link.coursera.org/f/a/i=
+mRR-MYfPa2DlqZgw7qHXQ~~/AAQRxRA~/wSvtOliRCG5QBN3-s4jCF1DCDjiZnnc_FaqOPV4PPv=
+f4LkVEa8GqTTJdTuLY-dwzCKF3RQ4Ge3JHd17D2CPtt3VYdlnjhwtlgyMMpXTg8wPsGPFPN3o-F=
+DK0K0yZ539vV327iW6G-XPsG5yHImJuyjGS-0WdLRXvbjoi9vld0IFRV-Je1EFQcaArbA_fWz48=
+DGEyW0Rv5qgPsoEyTBFtk02TkD9Djewya9Kg3vvKnY4~" target=3D"_blank"><img alt=3D=
+"Coursera Logo" height=3D"16" src=3D"https://dfsnmxrwzn4gu.cloudfront.net/0=
+.1.18/logos/coursera_logo.png" style=3D"display: block; outline: 0; text-d=
+ecoration: none; height: 16px; width: 100%; font-size: 13px; line-height: 1=
+00%; -ms-interpolation-mode: bicubic; border-width: 0;" width=3D"114"></a><=
+/td></tr></tbody></table></td></tr>=0A<tr><td class=3D"cmds-spacer-14" styl=
+e=3D"font-size: 0px; word-break: break-word; border-collapse: collapse; mso=
+-table-lspace: 0pt; mso-table-rspace: 0pt;"><div style=3D"height: 24px; lin=
+e-height: 24px;">=E2=80=8A</div></td></tr>=0A<tr><td align=3D"left" class=
+=3D"cmds-typography cmds-typography-actionPrimary" style=3D"font-size: 0px;=
+ word-break: break-word; border-collapse: collapse; mso-table-lspace: 0pt; =
+mso-table-rspace: 0pt; font-weight: inherit; line-height: inherit; letter-s=
+pacing: inherit; color: inherit; margin: 0;"><div style=3D"font-family: Hel=
+vetica,Arial,sans-serif; font-size: 14px; font-weight: 700; letter-spacing:=
+ .005em; line-height: 22px; color: #5b6780;" align=3D"left"><a href=3D"http=
+s://link.coursera.org/f/a/rQMHxm0KTxfzdADPtej7aA~~/AAQRxRA~/J-vWGQBfNl9FIhG=
+tcUSYLtDpfIq9gtW247JhFZiWBNastcocFOfSju9B12RyzROl4tyGki7tkBexRgKLl84n-8yWkr=
+-hWRxNyM5H3qQ9m-wW41Y3afETTidytI6mIUc56rTTmY8dQ-f4O44iGTMIcWkaeQUWFr2Zx6L_l=
+9hL_lspnHJYN21Nxdd74rhBPhCtOsxlIl3droGwYhhoHkq599xJ5B2H1VM2suzez24pcBWuXObW=
+uy9rPhKhBVgdC4QR9rTG9fRX7iBBLPkJxQ1eiw~~" target=3D"_blank" style=3D"text-d=
+ecoration: none; color: inherit !important;">Learner Help Center</a></div><=
+/td></tr>=0A<tr><td class=3D"cmds-spacer-15" style=3D"font-size: 0px; word-=
+break: break-word; border-collapse: collapse; mso-table-lspace: 0pt; mso-ta=
+ble-rspace: 0pt;"><div style=3D"height: 12px; line-height: 12px;">=E2=80=8A=
+</div></td></tr>=0A<tr><td align=3D"left" class=3D"cmds-typography cmds-typ=
+ography-actionPrimary" style=3D"font-size: 0px; word-break: break-word; bor=
+der-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; font-=
+weight: inherit; line-height: inherit; letter-spacing: inherit; color: inhe=
+rit; margin: 0;"><div style=3D"font-family: Helvetica,Arial,sans-serif; fon=
+t-size: 14px; font-weight: 700; letter-spacing: .005em; line-height: 22px; =
+color: #5b6780;" align=3D"left"><a href=3D"https://link.coursera.org/f/a/Jv=
+qvGWlSd3D3ywr8JaVw9A~~/AAQRxRA~/L-AyxtRb3aDsAb2ykMTZno0h6d2DSXzOhzW5siNufWV=
+mIJkxGmS7Xa45qXnciyri8iuEw_5-qXp_cSmBO6GiaxJdqybw13Ol_Hd7vPIaCrFNaHiq8tdmZk=
+En2Kmbg-ruUiqDUhAK7N9LHVaSergv9cMWxGSd5PAIB2SKJyw9wuKk7C8SpqfmvEyplcdxGwU12=
+3IcjOIi1JbWEc-SU6KvZiNeghZOMoiBQlOUaP_ehDWiwl-6jZuMFB1070YwKmD90ik0pRxElZJz=
+-bDTmDXPiYk6_P22ANaIeF1rdd3vDkob7_tNjwh32ZYTsW28FRgiaGJKmhZbZQmQ6-kXnXWBfQ~=
+~" target=3D"_blank" style=3D"text-decoration: none; color: inherit !import=
+ant;">Coursera for Business</a></div></td></tr>=0A<tr><td class=3D"cmds-spa=
+cer-16" style=3D"font-size: 0px; word-break: break-word; border-collapse: c=
+ollapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><div style=3D"heigh=
+t: 12px; line-height: 12px;">=E2=80=8A</div></td></tr>=0A<tr><td align=3D"l=
+eft" class=3D"cmds-typography cmds-typography-actionPrimary" style=3D"font-=
+size: 0px; word-break: break-word; border-collapse: collapse; mso-table-lsp=
+ace: 0pt; mso-table-rspace: 0pt; font-weight: inherit; line-height: inherit=
+; letter-spacing: inherit; color: inherit; margin: 0;"><div style=3D"font-f=
+amily: Helvetica,Arial,sans-serif; font-size: 14px; font-weight: 700; lette=
+r-spacing: .005em; line-height: 22px; color: #5b6780;" align=3D"left"><a hr=
+ef=3D"https://link.coursera.org/f/a/-b626GywlDzxTq0nWeaTGQ~~/AAQRxRA~/pmhFk=
+bTBmXihL5umgSkHDHvzNpdXVDFU_y0vMPFFk56NNXOjRi3mBE2-w8T5cFlhm2iGBgvZ0k7YvCqg=
+6F9hv2NyWgOQP3z7EH_1qKCOY22BOqEMvArrty9S2jw7SBnMdRMGIOVn6vu3cLSYrXs7VXpTAtH=
+jLwbawrFTbWD-k8VdIvQCwoOeUnEeXj7EgdwB2F34j8YBxuy9WOIT04GQvtEYQTG2VND3o538NT=
+Diam_pmk2EHnd7iIFfBBaXBVlI" target=3D"_blank" style=3D"text-decoration: non=
+e; color: inherit !important;">Communication Preferences</a></div></td></tr=
+>=0A<tr><td class=3D"cmds-spacer-17" style=3D"font-size: 0px; word-break: b=
+reak-word; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspa=
+ce: 0pt;"><div style=3D"height: 12px; line-height: 12px;">=E2=80=8A</div></=
+td></tr>=0A<tr><td align=3D"left" class=3D"cmds-typography cmds-typography-=
+actionPrimary" style=3D"font-size: 0px; word-break: break-word; border-coll=
+apse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; font-weight: =
+inherit; line-height: inherit; letter-spacing: inherit; color: inherit; mar=
+gin: 0;"><div style=3D"font-family: Helvetica,Arial,sans-serif; font-size: =
+14px; font-weight: 700; letter-spacing: .005em; line-height: 22px; color: #=
+5b6780;" align=3D"left"><a href=3D"https://link.coursera.org/f/a/zkac7bSDuY=
+EG7P2zaIfX_A~~/AAQRxRA~/H9CALQfD53AZ-z_-u3GBAiPmwvovEPwKAH_bT-jusXLFsxaMhMh=
+ricp_UqY8pUkZz3D5zbvq7xirfKq4P5haLm4E0UrlliW2NlchNtFS6A1Rk_quHtRbfXftW3Zsqm=
+XJEXIoW7Uq4GHQhIm97KlPF6YODw83iPY-54iou4vzWt8upjiczF30expnAmUva455fch_bqx0d=
+1wVwD6lO5hiShfkwir_sSpNxtiGDFmWQYNQBuCliyTCQkCbRd9uTFCj" target=3D"_blank" =
+style=3D"text-decoration: none; color: inherit !important;">Privacy Notice<=
+/a></div></td></tr>=0A<tr><td class=3D"cmds-spacer-18" style=3D"font-size: =
+0px; word-break: break-word; border-collapse: collapse; mso-table-lspace: 0=
+pt; mso-table-rspace: 0pt;"><div style=3D"height: 12px; line-height: 12px;"=
+>=E2=80=8A</div></td></tr>=0A</tbody></table></div>=0A<!--[if mso | IE]></t=
+d><td class=3D"" style=3D"" ><![endif]--><div class=3D"mj-column-px-32 mj-o=
+utlook-group-fix cmds-grid-item-gutter" style=3D"font-size: 0px; direction:=
+ ltr; display: inline-block !important; vertical-align: top; width: 100%;" =
+align=3D"left"><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=
+=3D"presentation" width=3D"100%" style=3D"border-collapse: collapse; mso-ta=
+ble-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=3D"padding-ri=
+ght: 16px; padding-left: 16px; border-collapse: collapse; mso-table-lspace:=
+ 0pt; mso-table-rspace: 0pt;" valign=3D"top"><table border=3D"0" cellpaddin=
+g=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D"100%" style=3D"bor=
+der-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbo=
+dy></tbody></table></td></tr></tbody></table></div>=0A<div class=3D"mj-colu=
+mn-per-100 mj-outlook-group-fix cmds-grid-item-gutter-xs" style=3D"font-siz=
+e: 0px; direction: ltr; display: none !important; vertical-align: top; widt=
+h: 100%;" align=3D"left"><table border=3D"0" cellpadding=3D"0" cellspacing=
+=3D"0" role=3D"presentation" width=3D"100%" style=3D"border-collapse: colla=
+pse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=3D=
+"padding-top: 16px; padding-bottom: 16px; border-collapse: collapse; mso-ta=
+ble-lspace: 0pt; mso-table-rspace: 0pt;" valign=3D"top"><table border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D"100%" s=
+tyle=3D"border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace:=
+ 0pt;"><tbody></tbody></table></td></tr></tbody></table></div>=0A<div class=
+=3D"mj-column-px-334 mj-outlook-group-fix" style=3D"font-size: 0px; directi=
+on: ltr; display: inline-block; vertical-align: top; width: 100%;" align=3D=
+"left"><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"pres=
+entation" style=3D"vertical-align: top; border-collapse: collapse; mso-tabl=
+e-lspace: 0pt; mso-table-rspace: 0pt;" width=3D"100%"><tbody>=0A<tr><td ali=
+gn=3D"right" class=3D"cmds-typography cmds-typography-actionPrimary align-m=
+obile-left" style=3D"font-size: 0px; word-break: break-word; border-collaps=
+e: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; font-weight: inh=
+erit; line-height: inherit; letter-spacing: inherit; color: inherit; margin=
+: 0;"><div style=3D"font-family: Helvetica,Arial,sans-serif; font-size: 14p=
+x; font-weight: 700; letter-spacing: .005em; line-height: 22px; color: #0f1=
+114;" align=3D"right">Download our App</div></td></tr>=0A<tr><td class=3D"c=
+mds-spacer-19" style=3D"font-size: 0px; word-break: break-word; border-coll=
+apse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><div style=
+=3D"height: 8px; line-height: 8px;">=E2=80=8A</div></td></tr>=0A<tr><td ali=
+gn=3D"right" class=3D"align-mobile-left" style=3D"font-size: 0px; word-brea=
+k: break-word; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-=
+rspace: 0pt; padding: 0;"><table border=3D"0" cellpadding=3D"0" cellspacing=
+=3D"0" role=3D"presentation" style=3D"border-collapse: collapse; border-spa=
+cing: 0px; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td st=
+yle=3D"width: 135px; border-collapse: collapse; mso-table-lspace: 0pt; mso-=
+table-rspace: 0pt;"><a href=3D"https://link.coursera.org/f/a/hlz0u4ttZoqlSZ=
+jPV9KpUw~~/AAQRxRA~/1w-85r1HkQZM2d8tvf7QQZBw32GTX0cc0WyIM-5d-gtBdsn4nBD8nu-=
+scsLZeovxuGQdI6gJB4q038THsqWKY3O17PYn3i761_VFP0JHjmdJ0O22NytInqVoGMuaWjoZ1e=
+FTKl0pX-pKmyd7ihr1LWwTBEGsvkJspVQvpl5GhJbCAGOsHkGQuWnfYEsBkwdF4LHehJBfY1OGR=
+NoYYG-Q5TopjEvkH6BPw_5TLnx4IUx2HuGVCL8YfhJmc3HGeLO2ynr5RoS8n6xWQNIN64TPV99y=
+iPsK6Y4SeBdS42TXhdM~" target=3D"_blank"><img alt=3D"Google Play Store" heig=
+ht=3D"auto" src=3D"https://dfsnmxrwzn4gu.cloudfront.net/0.1.18/footer/googl=
+e_play_store.png" style=3D"display: block; outline: 0; text-decoration: non=
+e; height: auto; width: 100%; font-size: 13px; line-height: 100%; -ms-inter=
+polation-mode: bicubic; border-width: 0;" width=3D"135"></a></td></tr></tbo=
+dy></table></td></tr>=0A<tr><td class=3D"cmds-spacer-20" style=3D"font-size=
+: 0px; word-break: break-word; border-collapse: collapse; mso-table-lspace:=
+ 0pt; mso-table-rspace: 0pt;"><div style=3D"height: 8px; line-height: 8px;"=
+>=E2=80=8A</div></td></tr>=0A<tr><td align=3D"right" class=3D"align-mobile-=
+left" style=3D"font-size: 0px; word-break: break-word; border-collapse: col=
+lapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padding: 0;"><table bo=
+rder=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=
+=3D"border-collapse: collapse; border-spacing: 0px; mso-table-lspace: 0pt; =
+mso-table-rspace: 0pt;"><tbody><tr><td style=3D"width: 135px; border-collap=
+se: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><a href=3D"htt=
+ps://link.coursera.org/f/a/kpRIkoAPv1nFeIrlSpTrfQ~~/AAQRxRA~/a9LfMpIw6x6BRp=
+5VYrOKSphkfyJu3krvqAdlCV_KqIfzgMw6bz6o5g2s4wFecu8ujp6I68A6CJN3jGeJ_EoAk7NTz=
+tmjAOIz9suIghQ5EXpUhrHxFMmX2bDaDUJ7qREpPM54sVSwOZbV5oUUab0crYkIzUdS_SNkHHKD=
+sI0JGbK0okcHU23E7GfAFjg7apDutawey0OgKHrK_POSzXYID84Rw29ctllrWDzRmdkj4-TzAEw=
+AQDkelrRXq5_JjLAYPDNv-ht5xPp4MxtQWx8Ctl8uMesQgDn_NX_iPN79FQ0~" target=3D"_b=
+lank"><img alt=3D"Apple Play Store" height=3D"auto" src=3D"https://dfsnmxrw=
+zn4gu.cloudfront.net/0.1.18/footer/apple_store.png" style=3D"display: block=
+; outline: 0; text-decoration: none; height: auto; width: 100%; font-size: =
+13px; line-height: 100%; -ms-interpolation-mode: bicubic; border-width: 0;"=
+ width=3D"135"></a></td></tr></tbody></table></td></tr>=0A<tr><td class=3D"=
+cmds-spacer-21" style=3D"font-size: 0px; word-break: break-word; border-col=
+lapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><div style=
+=3D"height: 24px; line-height: 24px;">=E2=80=8A</div></td></tr>=0A<tr><td a=
+lign=3D"right" class=3D"align-mobile-left" style=3D"font-size: 0px; word-br=
+eak: break-word; border-collapse: collapse; mso-table-lspace: 0pt; mso-tabl=
+e-rspace: 0pt; padding: 0;"><div class=3D"mj-column-px-264 mj-outlook-group=
+-fix align-mobile-left" style=3D"font-size: 0; line-height: 0; display: inl=
+ine-block; width: 100%; direction: ltr;" align=3D"left">=0A<!--[if mso | IE=
+]><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentat=
+ion" ><tr><td style=3D"vertical-align:top;width:52px;" ><![endif]--><div cl=
+ass=3D"mj-column-per-20 mj-outlook-group-fix" style=3D"font-size: 0px; dire=
+ction: ltr; display: inline-block; vertical-align: top; width: 20%;" align=
+=3D"left"><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"p=
+resentation" style=3D"vertical-align: top; border-collapse: collapse; mso-t=
+able-lspace: 0pt; mso-table-rspace: 0pt;" width=3D"100%"><tbody><tr><td ali=
+gn=3D"center" class=3D"cmds-footer-social-icon" style=3D"font-size: 0px; wo=
+rd-break: break-word; border-collapse: collapse; mso-table-lspace: 0pt; mso=
+-table-rspace: 0pt; padding: 0 0 0 16px;"><table border=3D"0" cellpadding=
+=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"border-collapse: co=
+llapse; border-spacing: 0px; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"=
+><tbody><tr><td style=3D"width: 28px; border-collapse: collapse; mso-table-=
+lspace: 0pt; mso-table-rspace: 0pt;"><a href=3D"https://link.coursera.org/f=
+/a/YmO_wJsUeSund59h77E7ew~~/AAQRxRA~/tfch7aoJl7n2bHeWlnzQr4UvW9UhIbpUGyiVS2=
+OtVhIp1ugXB_zTU1QNxWjsaw_5HHk1Ianft59oOH_SZK4UIPWB01DONn5ALaB7sF7xZOz6lkEjy=
+3nJaFHtuSJnRzfVa0h1Vvnf_JsfLur--d6oyw6sWM6KEuXY7NX_xAJPR2SmhxGqiTkiW0f8iyPl=
+n8o6XpmK2pGWbDlYEZ29Srcbx2yisOmIdiW63YHPnhJQ8IzpCAjaqetrQypLRM8CCZfV48nxl31=
+IvQ_2n2ojiecJpQ~~" target=3D"_blank"><img alt=3D"Linkedin" height=3D"28" sr=
+c=3D"https://dfsnmxrwzn4gu.cloudfront.net/0.1.18/footer/linkedin.png" style=
+=3D"display: block; outline: 0; text-decoration: none; height: 28px; width:=
+ 100%; font-size: 13px; line-height: 100%; -ms-interpolation-mode: bicubic;=
+ border-width: 0;" width=3D"28"></a></td></tr></tbody></table></td></tr></t=
+body></table></div>=0A<!--[if mso | IE]></td><td style=3D"vertical-align:to=
+p;width:52px;" ><![endif]--><div class=3D"mj-column-per-20 mj-outlook-group=
+-fix" style=3D"font-size: 0px; direction: ltr; display: inline-block; verti=
+cal-align: top; width: 20%;" align=3D"left"><table border=3D"0" cellpadding=
+=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"vertical-align: top=
+; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"=
+ width=3D"100%"><tbody><tr><td align=3D"center" class=3D"cmds-footer-social=
+-icon" style=3D"font-size: 0px; word-break: break-word; border-collapse: co=
+llapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padding: 0 0 0 16px;"=
+><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentati=
+on" style=3D"border-collapse: collapse; border-spacing: 0px; mso-table-lspa=
+ce: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=3D"width: 28px; borde=
+r-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><a hre=
+f=3D"https://link.coursera.org/f/a/D0n4pF3EtxnGF5KgvDHdxQ~~/AAQRxRA~/nZHeEc=
+VooeM-FNAdOwjmGOPxOWr795_JPw3JCiUKS2bFBDR34OueAK1Ir2FJBhQbn2pX7UtGDYKlHbFy0=
+vFloQXLrk-KC8r0Q_qDgEW_IXDoFJq_X8tplms6PUe8I1YUQN8qL488IwTwr4PVDlOtbt-Qk_q5=
+pssqvr1a362sv1WCBQ8PB7njKssRtC4QTLVOXnCfrL6-EWzq-rQNGhYbSXpgRFrdt1ubsMzzr4V=
+UaWJjjGpgYe8YpWeSjKMGIdME" target=3D"_blank"><img alt=3D"Instagram" height=
+=3D"28" src=3D"https://dfsnmxrwzn4gu.cloudfront.net/0.1.18/footer/instagram=
+.png" style=3D"display: block; outline: 0; text-decoration: none; height: =
+28px; width: 100%; font-size: 13px; line-height: 100%; -ms-interpolation-mo=
+de: bicubic; border-width: 0;" width=3D"28"></a></td></tr></tbody></table><=
+/td></tr></tbody></table></div>=0A<!--[if mso | IE]></td><td style=3D"verti=
+cal-align:top;width:52px;" ><![endif]--><div class=3D"mj-column-per-20 mj-o=
+utlook-group-fix" style=3D"font-size: 0px; direction: ltr; display: inline-=
+block; vertical-align: top; width: 20%;" align=3D"left"><table border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"vertica=
+l-align: top; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-r=
+space: 0pt;" width=3D"100%"><tbody><tr><td align=3D"center" class=3D"cmds-f=
+ooter-social-icon" style=3D"font-size: 0px; word-break: break-word; border-=
+collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; padding: =
+0 0 0 16px;"><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=
+=3D"presentation" style=3D"border-collapse: collapse; border-spacing: 0px; =
+mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=3D"widt=
+h: 28px; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace=
+: 0pt;"><a href=3D"https://link.coursera.org/f/a/mvnoUKtHd-d35XALTri8Ww~~/A=
+AQRxRA~/VPrmVq_9m--o8L0NyiPr_8a4ke-mxuvxZrDvmEcf8PR4qMFGSvCMPBFPD4exqguqTIU=
+EGtOvJMi6XMDkpo1jmpOv2-KN-o_RAJBJnJkTq1YdwJ4U1abgqSFz6T97bDLQSMhC8rJ3JiPxiG=
+LrXOLIEmwGDV4_JZ_EDMK6vQRZluE8PPetZA8RblH41ZVsP-Acs3r8WICrXCL3cOuKOTOeRL340=
+vKUfZZQvgVQ8er4ChuvXTIk9_KJzS_gnsVYpdCl" target=3D"_blank"><img alt=3D"Tikt=
+ok" height=3D"28" src=3D"https://dfsnmxrwzn4gu.cloudfront.net/0.1.18/footer=
+/tiktok.png" style=3D"display: block; outline: 0; text-decoration: none; he=
+ight: 28px; width: 100%; font-size: 13px; line-height: 100%; -ms-interpolat=
+ion-mode: bicubic; border-width: 0;" width=3D"28"></a></td></tr></tbody></t=
+able></td></tr></tbody></table></div>=0A<!--[if mso | IE]></td><td style=3D=
+"vertical-align:top;width:52px;" ><![endif]--><div class=3D"mj-column-per-2=
+0 mj-outlook-group-fix" style=3D"font-size: 0px; direction: ltr; display: i=
+nline-block; vertical-align: top; width: 20%;" align=3D"left"><table border=
+=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"v=
+ertical-align: top; border-collapse: collapse; mso-table-lspace: 0pt; mso-t=
+able-rspace: 0pt;" width=3D"100%"><tbody><tr><td align=3D"center" class=3D"=
+cmds-footer-social-icon" style=3D"font-size: 0px; word-break: break-word; b=
+order-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; pad=
+ding: 0 0 0 16px;"><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" =
+role=3D"presentation" style=3D"border-collapse: collapse; border-spacing: 0=
+px; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td style=3D"=
+width: 28px; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rs=
+pace: 0pt;"><a href=3D"https://link.coursera.org/f/a/GOG4_Dq4Fxum1OusqVDk0Q=
+~~/AAQRxRA~/2PL6_xasrxE37dsVpfHGOeOYP7sKIEywjV_UGiMnKjV4D1c1qxVUErO69Krjo9o=
+hyU9evYY3cF9aVZKuynt5bn1zzms5oGySwLMF9vOF_0kgmSYoxxmSlz9EfoyhOtfxUnFDTWDVi4=
+AEC8C6mWLANGAqyMRYWvZNlNj5TZD66CEXRMm0z2C0sGl5YU5LP-Ny7i7gUAU4DOBVBcZ7toiHO=
+v9xQqFB_RaG_0gRRRQoCHLyba7scpu0_ZQEKpMULC7M" target=3D"_blank"><img alt=3D"=
+Facebook" height=3D"28" src=3D"https://dfsnmxrwzn4gu.cloudfront.net/0.1.18/=
+footer/facebook.png" style=3D"display: block; outline: 0; text-decoration: =
+none; height: 28px; width: 100%; font-size: 13px; line-height: 100%; -ms-in=
+terpolation-mode: bicubic; border-width: 0;" width=3D"28"></a></td></tr></t=
+body></table></td></tr></tbody></table></div>=0A<!--[if mso | IE]></td><td =
+style=3D"vertical-align:top;width:52px;" ><![endif]--><div class=3D"mj-colu=
+mn-per-20 mj-outlook-group-fix" style=3D"font-size: 0px; direction: ltr; di=
+splay: inline-block; vertical-align: top; width: 20%;" align=3D"left"><tabl=
+e border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" st=
+yle=3D"vertical-align: top; border-collapse: collapse; mso-table-lspace: 0p=
+t; mso-table-rspace: 0pt;" width=3D"100%"><tbody><tr><td align=3D"center" c=
+lass=3D"cmds-footer-social-icon" style=3D"font-size: 0px; word-break: break=
+-word; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: =
+0pt; padding: 0 0 0 16px;"><table border=3D"0" cellpadding=3D"0" cellspacin=
+g=3D"0" role=3D"presentation" style=3D"border-collapse: collapse; border-sp=
+acing: 0px; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td s=
+tyle=3D"width: 28px; border-collapse: collapse; mso-table-lspace: 0pt; mso-=
+table-rspace: 0pt;"><a href=3D"https://link.coursera.org/f/a/3ZAZqTAb2BFiz-=
+hpPIetvg~~/AAQRxRA~/rvzsK2IFHjVChua9_VUIKPP-kmJ7EMXcRCO2X-EHLSrQ6a1EFX9E9aG=
+TiRiOiurhz-9DZirPU97VjWyu6Y8ztPOQzdtK6wrWHuJ42_DDf6YfEAHmNZyHktJlEjOvi9_hEJ=
+B8D_WHxhjmRmoRsairwdJQAIJGN9AHfbKMmxf9l6H-rV7ognUIGl5JZuajbbtNpqJYZlmiKJRL8=
+e-mr7IVGvDsckUaPvaxk4-AIzoC4ZuJVqy8Hnplki4fX0xqPpys" target=3D"_blank"><img=
+ alt=3D"X" height=3D"28" src=3D"https://dfsnmxrwzn4gu.cloudfront.net/0.1.18=
+/footer/x.png" style=3D"display: block; outline: 0; text-decoration: none; =
+height: 28px; width: 100%; font-size: 13px; line-height: 100%; -ms-interpol=
+ation-mode: bicubic; border-width: 0;" width=3D"28"></a></td></tr></tbody><=
+/table></td></tr></tbody></table></div>=0A<!--[if mso | IE]></td></tr></tab=
+le><![endif]-->=0A</div></td></tr>=0A</tbody></table></div>=0A<!--[if mso |=
+ IE]></td></tr></table><![endif]-->=0A</td></tr></tbody></table></div>=0A<!=
+--[if mso | IE]></td></tr></table><table align=3D"center" border=3D"0" cell=
+padding=3D"0" cellspacing=3D"0" class=3D"" role=3D"presentation" style=3D"w=
+idth:700px;" width=3D"700" ><tr><td style=3D"line-height:0px;font-size:0px;=
+mso-line-height-rule:exactly;"><![endif]--><div style=3D"max-width: 700px; =
+margin: 0 auto;"><table align=3D"center" border=3D"0" cellpadding=3D"0" cel=
+lspacing=3D"0" role=3D"presentation" style=3D"width: 100%; border-collapse:=
+ collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><tbody><tr><td st=
+yle=3D"direction: ltr; font-size: 0px; border-collapse: collapse; mso-table=
+-lspace: 0pt; mso-table-rspace: 0pt; padding: 0;" align=3D"center">=0A<!--[=
+if mso | IE]><table role=3D"presentation" border=3D"0" cellpadding=3D"0" ce=
+llspacing=3D"0"><tr><td class=3D"" style=3D"vertical-align:top;width:700px;=
+" ><![endif]--><div class=3D"mj-column-per-100 mj-outlook-group-fix" style=
+=3D"font-size: 0px; direction: ltr; display: inline-block; vertical-align: =
+top; width: 100%;" align=3D"left"><table border=3D"0" cellpadding=3D"0" cel=
+lspacing=3D"0" role=3D"presentation" style=3D"vertical-align: top; border-c=
+ollapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;" width=3D"=
+100%"><tbody>=0A<tr><td class=3D"cmds-spacer-22" style=3D"font-size: 0px; w=
+ord-break: break-word; border-collapse: collapse; mso-table-lspace: 0pt; ms=
+o-table-rspace: 0pt;"><div style=3D"height: 32px; line-height: 32px;">=E2=
+=80=8A</div></td></tr>=0A<tr><td align=3D"left" class=3D"cmds-typography cm=
+ds-typography-bodyTertiary" style=3D"font-size: 0px; word-break: break-word=
+; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; =
+font-weight: inherit; line-height: inherit; letter-spacing: inherit; color:=
+ inherit; margin: 0;"><div style=3D"font-family: Helvetica,Arial,sans-serif=
+; font-size: 13px; font-weight: 400; letter-spacing: 0; line-height: 19px; =
+color: #5b6780;" align=3D"left">=C2=A9 2026 Coursera Inc. All rights reserv=
+ed. Coursera and the Coursera logo are registered trademarks of Coursera, I=
+nc. All other trademarks are property of their respective owners.</div></td=
+></tr>=0A<tr><td class=3D"cmds-spacer-23" style=3D"font-size: 0px; word-bre=
+ak: break-word; border-collapse: collapse; mso-table-lspace: 0pt; mso-table=
+-rspace: 0pt;"><div style=3D"height: 16px; line-height: 16px;">=E2=80=8A</d=
+iv></td></tr>=0A<tr><td align=3D"left" class=3D"cmds-typography cmds-typogr=
+aphy-bodyTertiary" style=3D"font-size: 0px; word-break: break-word; border-=
+collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; font-weig=
+ht: inherit; line-height: inherit; letter-spacing: inherit; color: inherit;=
+ margin: 0;"><div style=3D"font-family: Helvetica,Arial,sans-serif; font-si=
+ze: 13px; font-weight: 400; letter-spacing: 0; line-height: 19px; color: #5=
+b6780;" align=3D"left">Coursera | 2440 West El Camino Real, Suite 500, Moun=
+tain View, CA 94040 USA</div></td></tr>=0A<tr><td class=3D"cmds-spacer-24" =
+style=3D"font-size: 0px; word-break: break-word; border-collapse: collapse;=
+ mso-table-lspace: 0pt; mso-table-rspace: 0pt;"><div style=3D"height: 0; li=
+ne-height: 0;">=E2=80=8A</div></td></tr>=0A</tbody></table></div>=0A<!--[if=
+ mso | IE]></td></tr></table><![endif]-->=0A</td></tr></tbody></table></div=
+>=0A<!--[if mso | IE]></td></tr></table></td></tr></table><![endif]-->=0A</=
+td></tr></tbody></table></div>=0A<!--[if mso | IE]></td></tr></table><![end=
+if]-->=0A</div>=0A</div></body>=0A</html><html><p style=3D"display: block; =
+margin: 0 0 13px;"></p></html>
+--_----Q0Gf047OBntOfYri6ZOPIQ===_CA/E2-32048-672886A6--
+
