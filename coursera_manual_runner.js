@@ -3,9 +3,8 @@ const os = require("node:os");
 const path = require("node:path");
 const readline = require("node:readline/promises");
 const { stdin: input, stdout: output } = require("node:process");
-const { execFileSync, execSync } = require("node:child_process");
+const { execFileSync, execSync, exec } = require("node:child_process");
 const { chromium } = require("playwright-extra");
-const { skip } = require("node:test");
 const stealth = require("puppeteer-extra-plugin-stealth")();
 
 // Apply the stealth plugin: spoofs navigator.webdriver, plugins, WebGL, etc.
@@ -48,6 +47,16 @@ async function saveLearnedWeights() {
   }
 }
 
+async function resetLearnedWeights() {
+  globalActionWeights = {};
+  try {
+    await fs.unlink("learned_weights.json");
+    console.warn("[RL] 15 consecutive failures reached: Deleted learned_weights.json and reset Q-table from scratch.");
+  } catch (e) {
+    console.warn("[RL] 15 consecutive failures reached: Reset Q-table in memory.");
+  }
+}
+
 function getPageStateKey(pageUrl, pageText = "", profileName = "default", vpnCountry = "default") {
   try {
     const url = new URL(pageUrl);
@@ -65,7 +74,7 @@ function getPageStateKey(pageUrl, pageText = "", profileName = "default", vpnCou
 async function adaptiveActionDecision(page, log, targetCheck, TF = 1.0, profileName = "default", vpnCountry = "default") {
   let visibleButtons = [];
   const startWait = Date.now();
-  const maxWait = 10000 * TF; // Wait up to 10 seconds (scaled by TF) for buttons to appear
+  const maxWait = 1500 * TF; // Fast button scan (max 1.5s)
 
   while (Date.now() - startWait < maxWait) {
     const buttonLocators = await page.locator('button, [role="button"], a.btn, a[href*="enroll"], a[href*="certificate"], a.cds-button, button.cds-button, input[type="button"], input[type="submit"]').all().catch(() => []);
@@ -88,13 +97,20 @@ async function adaptiveActionDecision(page, log, targetCheck, TF = 1.0, profileN
         const title = (await loc.getAttribute("title").catch(() => "") || "").trim().toLowerCase();
         if (!text && !ariaLabel) continue;
 
-        // Hard-skip buttons that are never useful for course progression
+        // Hard-skip buttons that are never useful for course progression (goals, weekly targets, feedback, etc.)
         if (
           text.endsWith("?") ||
           text.includes("report") ||
+          text.includes("weekly") ||
+          text.includes("goal") ||
+          text.includes("schedule") ||
           ariaLabel.includes("report") ||
+          ariaLabel.includes("weekly") ||
+          ariaLabel.includes("goal") ||
           title.includes("report") ||
-          /^(show \d+ more|learn more|read more|save now|save \d+% now|sounds great!|turn it off|how does this compare|what does the first week|will this help|is this the right level|what other options|set your goal|set a goal|in progress|in-progress|active|saved|archived)$/i.test(text)
+          title.includes("weekly") ||
+          title.includes("goal") ||
+          /^(show \d+ more|learn more|read more|save now|save \d+% now|sounds great!|turn it off|how does this compare|what does the first week|will this help|is this the right level|what other options|set your goal|set a goal|set weekly goal|set weekly target|weekly goal|in progress|in-progress|active|saved|archived)$/i.test(text)
         ) continue;
 
         visibleButtons.push({
@@ -165,8 +181,8 @@ async function adaptiveActionDecision(page, log, targetCheck, TF = 1.0, profileN
   const preUrl = page.url();
   
   try {
-    // Wait briefly (300ms to 800ms scaled by TF) to simulate human behavior and maintain stealth
-    const waitTime = Math.max(300, 300 * TF) + Math.floor(Math.random() * 500);
+    // Wait briefly (100ms to 250ms scaled by TF) to simulate human behavior and maintain stealth
+    const waitTime = Math.max(100, 100 * TF) + Math.floor(Math.random() * 150);
     log(`[RL] Waiting ${(waitTime / 1000).toFixed(2)}s before clicking "${choice.text}"...`);
     await page.waitForTimeout(waitTime);
 
@@ -608,7 +624,7 @@ const LAB_PATH = "";
 const SURVEY_PATH = "";
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || "artifacts";
 const OBSERVE_VERBOSE = /^(1|y|yes|true)$/i.test(process.env.OBSERVE_VERBOSE || "");
-const CERT_ATTEMPTS = Number.parseInt(process.env.CERT_ATTEMPTS || "8", 10);
+const CERT_ATTEMPTS = Number.parseInt(process.env.CERT_ATTEMPTS || "3", 10);
 const CERT_WAIT_MS = Number.parseInt(process.env.CERT_WAIT_MS || "5000", 10);
 const COLAB_RECOVERY = /^(1|y|yes|true)$/i.test(
   process.env.COURSERA_COLAB || process.env.COLAB_RECOVERY || process.env.GOOGLE_COLAB || "",
@@ -791,13 +807,13 @@ async function clickAny(page, candidates, { timeout = 12000, optional = false, f
 
 async function checkExistingCertificate(page, log, FULL = "") {
   try {
-    if (log) log("Checking for existing certificate / completion card (polling up to 12s for slow load)...");
+    if (log) log("Checking for existing certificate / completion card (polling up to 4s)...");
     
     const startTime = Date.now();
     let certUrl = "";
     let congratulationsFound = false;
 
-    while (Date.now() - startTime < 12000) {
+    while (Date.now() - startTime < 4000) {
       // 1) Direct URL check
       certUrl = await findCertificateUrl(page);
       if (certUrl && /\/(share|account\/accomplishments|verify)\b|coursera\.org\/share\//.test(certUrl)) {
@@ -807,7 +823,7 @@ async function checkExistingCertificate(page, log, FULL = "") {
 
       // 2) Check for "Congratulations" text or "View certificate" button
       const bodyText = (await page.innerText("body").catch(() => "")).toLowerCase();
-      if (bodyText.includes("congratulations on completing") || bodyText.includes("your accomplishments")) {
+      if (bodyText.includes("congratulations on completing")) {
         congratulationsFound = true;
       }
 
@@ -823,10 +839,10 @@ async function checkExistingCertificate(page, log, FULL = "") {
         } else {
           // Click button to open certificate page or tab
           const [popup] = await Promise.all([
-            page.context().waitForEvent("page", { timeout: 4000 }).catch(() => null),
-            viewCertBtn.click({ timeout: 5000 }).catch(() => {})
+            page.context().waitForEvent("page", { timeout: 2000 }).catch(() => null),
+            viewCertBtn.click({ timeout: 2000 }).catch(() => {})
           ]);
-          await page.waitForTimeout(3000);
+          await page.waitForTimeout(500);
           if (popup) {
             certUrl = popup.url();
             await popup.close().catch(() => {});
@@ -840,14 +856,14 @@ async function checkExistingCertificate(page, log, FULL = "") {
         }
       }
 
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(250);
     }
 
     // 3) Fallback: If "Congratulations" text was seen or certificate exists, check accomplishments tab directly
     if (congratulationsFound) {
       if (log) log("Congratulations card detected! Navigating to accomplishments tab to retrieve certificate link...");
-      await page.goto("https://www.coursera.org/user-verification?returnTo=%2Fmy-learning%3FmyLearningTab%3DCERTIFICATES", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
-      await page.waitForTimeout(4000);
+      await page.goto("https://www.coursera.org/user-verification?returnTo=%2Fmy-learning%3FmyLearningTab%3DCERTIFICATES", { waitUntil: "domcontentloaded", timeout: 8000 }).catch(() => {});
+      await page.waitForTimeout(1000);
       certUrl = await findCertificateUrl(page);
       if (certUrl && /\/(share|account\/accomplishments|verify)\b|coursera\.org\/share\//.test(certUrl)) {
         if (log) log(`[ALREADY COMPLETED] Certificate URL retrieved from accomplishments page: ${certUrl}`);
@@ -1419,9 +1435,9 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     if (await loginBtn.count().catch(() => 0) > 0) {
       await loginBtn.click({ timeout: 5000 }).catch(() => {});
       log("Clicked Log In button");
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(300);
     }
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(200);
   }
 
   // 2) Fill Email field if present
@@ -1433,8 +1449,8 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     await emailInput.fill("").catch(() => {});
     await page.waitForTimeout(200);
     await emailInput.focus().catch(() => {});
-    await page.keyboard.type(student.email, { delay: 30 });
-    await page.waitForTimeout(500);
+    await page.keyboard.type(student.email, { delay: 5 });
+    await page.waitForTimeout(100);
 
     const continueEmailBtn = page.locator('button:has-text("Continue"), button[type="submit"]').filter({ visible: true }).first();
     if (await continueEmailBtn.count().catch(() => 0) > 0) {
@@ -1442,7 +1458,7 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       if (btnText.includes("continue")) {
         await continueEmailBtn.click().catch(() => {});
         log("Clicked Continue email button");
-        await page.waitForTimeout(1500);
+        await page.waitForTimeout(300);
       }
     }
   }
@@ -1494,28 +1510,28 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     await passwordInput.fill("").catch(() => {});
     await page.waitForTimeout(200);
     await passwordInput.focus().catch(() => {});
-    await page.keyboard.type(passCandidate, { delay: 30 });
-    await page.waitForTimeout(300);
+    await page.keyboard.type(passCandidate, { delay: 5 });
+    await page.waitForTimeout(100);
 
     const submitBtn = page.locator('button:has-text("Log In"), button:has-text("Login"), button[type="submit"]').filter({ visible: true }).first();
     if (await submitBtn.count() > 0) {
       await submitBtn.click().catch(() => {});
       log("Clicked Login submit button");
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(500);
     }
 
     const contBtn = page.locator('button:has-text("Continue")').filter({ visible: true }).first();
     if (await contBtn.count() > 0) {
       await contBtn.click().catch(() => {});
       log("Clicked Continue button");
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(300);
     }
 
     const skipForNowBtn = page.locator('button:has-text("Skip for now"), a:has-text("Skip for now")').filter({ visible: true }).first();
     if (await skipForNowBtn.count() > 0) {
       await skipForNowBtn.click().catch(() => {});
       log("Clicked Skip for now button");
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(200);
     }
 
     await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
@@ -1594,17 +1610,21 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
   if (!page.url().includes("/learn/") && !page.url().includes("/projects/")) {
     log(`Navigating to target course page: ${COURSE_URL}`);
     await goto(COURSE_URL);
-    await page.waitForTimeout(5000);
-
-    const courseCert = await checkExistingCertificate(page, log, FULL);
-    if (courseCert) return courseCert;
+    await page.waitForTimeout(500);
   }
 
-  // 3) Finish enrollment: run adaptive decision loop until we land in the course (/learn/)
+  // 3) Finish enrollment: run fast-path enroll & adaptive decision loop until we land in course
   const enrollDeadline = Date.now() + 50000 * TF;
-  log("Entering adaptive reinforcement learning enrollment loop...");
-  
-  await acceptCookies({ timeout: 6000 });
+  await acceptCookies({ timeout: 2000 });
+
+  // Fast-path direct enrollment click before entering loop
+  const fastEnrollBtn = page.locator('a:has-text("Go to course"), button:has-text("Go to course"), button:has-text("Enroll for free"), a:has-text("Enroll for free"), button:has-text("Start learning"), button:has-text("Continue")').filter({ visible: true }).first();
+  if (await fastEnrollBtn.count().catch(() => 0) > 0) {
+    const label = await fastEnrollBtn.innerText().catch(() => "Go to course");
+    log(`[Fast-path] Instantly clicking course button: "${label}"`);
+    await fastEnrollBtn.click({ force: true, timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(300);
+  }
   
   while (Date.now() < enrollDeadline && !(await isOnLearnCourse())) {
     await dismissOverlays(page);
@@ -1701,7 +1721,7 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
           /Using the Fetch API/i,
           /Try-catch blocks/i,
           /To enhance website security, performance, and reliability/i,
-          /Git/i,
+          /\bGit\b/i,
           /To handle and serve requests for real-time data efficiently/i
         ]
       }
@@ -1772,7 +1792,7 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     }
 
     const checkQuizAlreadyPassed = async () => {
-      // If we are actively answering quiz questions, do NOT treat modals as already passed!
+      // If we are actively answering quiz questions, do NOT treat as already passed!
       const inActiveQuiz = (await page.locator('label, input[type="radio"], input[type="checkbox"]')
         .filter({ visible: true })
         .filter({ hasNot: page.locator('[role="dialog"], [role="alertdialog"], .rc-Modal, [data-testid*="modal"]') })
@@ -1780,61 +1800,72 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       
       if (inActiveQuiz) return false;
 
-      // 1) Check for "Start new attempt?" modal popup ONLY when NOT in active quiz
-      const newAttemptModal = page.locator('div, section, [role="dialog"]').filter({ hasText: /Start new attempt\?/i }).first();
-      if (await newAttemptModal.count().catch(() => 0) > 0 && await newAttemptModal.isVisible().catch(() => false)) {
-        log(`[Quiz] "Start new attempt?" modal detected for ${quiz.name} (not answering). Quiz is already submitted! Skipping...`);
-        const cancelBtn = newAttemptModal.locator('button:has-text("Cancel")').filter({ visible: true }).first();
-        if (await cancelBtn.count().catch(() => 0) > 0) {
-          await cancelBtn.click().catch(() => {});
-          await page.waitForTimeout(500);
+      const pageText = (await page.innerText("body").catch(() => "")).toLowerCase();
+
+      // 1) Check if explicitly PASSED: "you passed!" or "you passed"
+      if (pageText.includes("you passed!") || pageText.includes("you passed")) {
+        log(`[Quiz] ${quiz.name} is ALREADY PASSED ('You passed!' confirmed). Moving to next item...`);
+        const nextBtn = page.locator('button:has-text("Go to next item"), a:has-text("Go to next item")').filter({ visible: true }).first();
+        if (await nextBtn.count().catch(() => 0) > 0) {
+          await nextBtn.click({ force: true, timeout: 3000 }).catch(() => {});
         }
         return true;
       }
 
-      // 2) Check for "You passed!" or grade text or green checkmark on quiz page
-      const pageText = (await page.innerText("body").catch(() => "")).toLowerCase();
-      if (pageText.includes("you passed!") || 
-          pageText.includes("you passed") ||
-          pageText.includes("graded assignment • grade:") || 
-          pageText.includes("latest submission grade") || 
-          /grade:\s*\d+%/i.test(pageText) || 
-          (pageText.includes("go to next item") && pageText.includes("try again") && pageText.includes("grade"))) {
-        log(`[Quiz] ${quiz.name} is ALREADY PASSED ('You passed!' / grade found). Skipping to next quiz...`);
-        return true;
+      // 2) Check if explicitly FAILED: "didn't pass" or "did not pass"
+      if (pageText.includes("didn't pass") || pageText.includes("did not pass") || pageText.includes("you didn't pass")) {
+        log(`[Quiz] ${quiz.name} was FAILED (score < 80%). Will retake quiz now...`);
+        return false;
       }
 
       return false;
     };
 
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(300);
     if (await checkQuizAlreadyPassed()) {
       continue;
     }
 
-    log(`[AUTO] Starting ${quiz.name} via adaptive RL decision loop...`);
+    log(`[AUTO] Starting ${quiz.name}...`);
     const assignDeadline = Date.now() + 30000 * TF;
     let quizSkipped = false;
 
     while (Date.now() < assignDeadline && !(await isQuizLoaded())) {
       await dismissOverlays(page);
 
-      if (await checkQuizAlreadyPassed()) {
-        quizSkipped = true;
-        break;
+      // Check if "Start new attempt?" modal popped up (Image 3)
+      const newAttemptModal = page.locator('div, section, [role="dialog"]').filter({ hasText: /Start new attempt\?/i }).first();
+      if (await newAttemptModal.count().catch(() => 0) > 0 && await newAttemptModal.isVisible().catch(() => false)) {
+        log(`[Quiz] "Start new attempt?" modal detected. Clicking "Continue"...`);
+        const continueBtn = newAttemptModal.locator('button:has-text("Continue")').filter({ visible: true }).first();
+        if (await continueBtn.count().catch(() => 0) > 0) {
+          await continueBtn.click({ force: true, timeout: 5000 }).catch(() => {});
+          await page.waitForTimeout(500);
+        }
+        if (await isQuizLoaded()) break;
       }
 
-      // Priority check for direct quiz start/resume/retry buttons
-      const quizStartBtn = page.locator('button:has-text("Resume assignment"), button:has-text("Start assignment"), button:has-text("Try again"), button:has-text("Start quiz"), button[data-testid="CoverPageActionButton"], button:has-text("Start")').filter({ visible: true }).first();
+      // Priority check for direct quiz start/resume/retry buttons (excluding weekly target/goal cards)
+      const quizStartBtn = page.locator('button[data-testid="CoverPageActionButton"], button:has-text("Start assignment"), button:has-text("Start quiz"), button:has-text("Resume assignment"), button:has-text("Try again"), a:has-text("Try again")')
+        .filter({ visible: true })
+        .filter({ hasNotText: /weekly|target|goal/i })
+        .first();
+
       if (await quizStartBtn.count().catch(() => 0) > 0) {
         const btnLabel = await quizStartBtn.innerText().catch(() => "Start");
         log(`[Quiz] Direct quiz button found, clicking "${btnLabel}"...`);
-        await quizStartBtn.click({ timeout: 5000 }).catch(() => {});
-        await page.waitForTimeout(2000);
+        await quizStartBtn.click({ force: true, timeout: 5000 }).catch(() => {});
+        await page.waitForTimeout(1000);
 
-        if (await checkQuizAlreadyPassed()) {
-          quizSkipped = true;
-          break;
+        // Check if "Start new attempt?" modal appeared after clicking "Try again" (Image 3)
+        const modalAfterClick = page.locator('div, section, [role="dialog"]').filter({ hasText: /Start new attempt\?/i }).first();
+        if (await modalAfterClick.count().catch(() => 0) > 0 && await modalAfterClick.isVisible().catch(() => false)) {
+          log(`[Quiz] "Start new attempt?" modal appeared after clicking "${btnLabel}". Clicking "Continue"...`);
+          const continueBtn = modalAfterClick.locator('button:has-text("Continue")').filter({ visible: true }).first();
+          if (await continueBtn.count().catch(() => 0) > 0) {
+            await continueBtn.click({ force: true, timeout: 5000 }).catch(() => {});
+            await page.waitForTimeout(1000);
+          }
         }
 
         if (await isQuizLoaded()) break;
@@ -1857,21 +1888,17 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
 
     log(`[AUTO] Answering ${quiz.name} questions...`);
+    await page.waitForTimeout(1000);
     await page.waitForSelector("label", { state: "visible", timeout: 15000 }).catch(() => {});
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(1000);
 
     for (const pattern of quiz.answers) {
       try {
         let label = page.locator("label").filter({ hasText: pattern }).first();
         let count = await label.count();
         if (count === 0) {
-          // Option not found: wait up to 5s extra for the text to appear
-          await page.waitForTimeout(2000);
+          await page.waitForTimeout(200);
           count = await label.count();
-          if (count === 0) {
-            await page.waitForTimeout(3000);
-            count = await label.count();
-          }
         }
         if (count > 0) {
           await label.scrollIntoViewIfNeeded({ timeout: 4000 });
@@ -1911,11 +1938,28 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
       }
     }
 
-    // Submit honor code + submit button
-    await fillSel('input[data-testid="honor-code-legal-name-input"]', FULL, { optional: true });
-    
-    log(`[Quiz] Waiting 1.00s after filling name before pressing submit...`);
-    await page.waitForTimeout(1000);
+    // Honor Code: Instantly check agreement checkbox FIRST if present on screen
+    log('Checking Honor Code agreement checkbox (if present)...');
+    const agreementCheckbox = page.locator('#agreement-checkbox-base, input[id*="agreement"], input[aria-labelledby*="agreement-checkbox"]').first();
+    const agreementLabel = page.locator('label:has(#agreement-checkbox-base), label:has-text("understand and agree")').first();
+
+    if (await agreementCheckbox.count().catch(() => 0) > 0 && await agreementCheckbox.isVisible().catch(() => false)) {
+      await agreementCheckbox.check({ force: true, timeout: 1000 }).catch(async () => {
+        await agreementLabel.click({ force: true, timeout: 1000 }).catch(() => {});
+      });
+    } else if (await agreementLabel.count().catch(() => 0) > 0 && await agreementLabel.isVisible().catch(() => false)) {
+      await agreementLabel.click({ force: true, timeout: 1000 }).catch(() => {});
+    }
+
+    // Fill legal name input ONLY if visible on screen (0 wait time)
+    const nameInput = page.locator('input[data-testid="honor-code-legal-name-input"], input[id*="honor-code"]').first();
+    if (await nameInput.count().catch(() => 0) > 0 && await nameInput.isVisible().catch(() => false)) {
+      log(`Filling Honor Code legal name input: "${FULL}"`);
+      await nameInput.fill(FULL).catch(() => {});
+    }
+
+    log(`[Quiz] Pressing primary submit button...`);
+    await page.waitForTimeout(300);
     await dismissOverlays(page);
 
     const submitBtn = page.locator('button[data-testid="submit-button"]').filter({ visible: true }).first();
@@ -1925,20 +1969,20 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     log('[Quiz] Waiting for submit modal confirmation dialog...');
     await page.waitForTimeout(1000);
     
-    // Poll up to 10 seconds for the modal Submit button
+    // Poll up to 8 seconds for the modal Submit button (dialog-submit-button)
     const modalStart = Date.now();
     let modalClicked = false;
 
-    while (Date.now() - modalStart < 10000) {
-      const modalSubmitBtn = page.locator('button[data-testid="dialog-submit-button"], [role="dialog"] button:has-text("Submit"), [role="dialog"] button[type="submit"], div.rc-Modal button:has-text("Submit")').filter({ visible: true }).first();
+    while (Date.now() - modalStart < 8000) {
+      const modalSubmitBtn = page.locator('button[data-testid="dialog-submit-button"], [role="dialog"] button[data-testid="dialog-submit-button"], [data-testid="AttemptViewSubmitControls__buttons"] button[data-testid="dialog-submit-button"]').filter({ visible: true }).first();
       
       if (await modalSubmitBtn.count().catch(() => 0) > 0 && await modalSubmitBtn.isVisible().catch(() => false)) {
-        log(`[Quiz] Found modal submit button! Clicking...`);
+        log(`[Quiz] Found modal submit button (dialog-submit-button)! Clicking...`);
         await modalSubmitBtn.scrollIntoViewIfNeeded().catch(() => {});
         await modalSubmitBtn.click({ force: true, timeout: 5000 }).catch(async () => {
           await modalSubmitBtn.dispatchEvent("click").catch(() => {});
         });
-        await page.waitForTimeout(1500);
+        await page.waitForTimeout(1000);
 
         // Check if modal closed / submission completed
         const modalStillVisible = await modalSubmitBtn.isVisible().catch(() => false);
@@ -1948,12 +1992,22 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
           break;
         }
       }
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(400);
     }
 
     if (!modalClicked) {
       log('[Quiz] Fallback: attempting generic dialog submit click...');
       await clickSel('button[data-testid="dialog-submit-button"]', { timeout: 5000, optional: true });
+    }
+
+    log('[Quiz] Both submit answers pressed successfully. Waiting 1.50s before moving to next quiz...');
+    await page.waitForTimeout(1500);
+
+    const nextItemBtn = page.locator('button:has-text("Go to next item"), button:has-text("Next item"), a:has-text("Go to next item"), a:has-text("Next item")').filter({ visible: true }).first();
+    if (await nextItemBtn.count().catch(() => 0) > 0) {
+      log('[Quiz] Clicking "Go to next item" button...');
+      await nextItemBtn.click({ force: true, timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(1000);
     }
     
     await page.waitForTimeout(2000 * TF);
@@ -2056,6 +2110,125 @@ async function runAutomatedFlow(page, student, logPrefix = "", profile = null) {
     log(`certificate not ready yet (attempt ${attempt}/${CERT_ATTEMPTS}), retrying...`);
     await page.waitForTimeout(1500);
   }
+
+  // If certificate was not captured after 3 attempts, re-visit all quiz URLs directly to check/re-solve quizzes without re-enrollment or browser restart
+  log("Certificate not ready after 3 attempts — re-visiting all quiz URLs directly to solve any unpassed quizzes...");
+  for (const quiz of quizzes) {
+    log(`[Quiz-Retry] Navigating directly to ${quiz.name}...`);
+    await goto(`${LEARN_BASE}${quiz.path}`);
+    await page.waitForTimeout(500);
+
+    const checkQuizAlreadyPassed = async () => {
+      const inActiveQuiz = (await page.locator('label, input[type="radio"], input[type="checkbox"]')
+        .filter({ visible: true })
+        .filter({ hasNot: page.locator('[role="dialog"], [role="alertdialog"], .rc-Modal, [data-testid*="modal"]') })
+        .count().catch(() => 0)) > 0;
+      if (inActiveQuiz) return false;
+
+      const pageText = (await page.innerText("body").catch(() => "")).toLowerCase();
+      if (pageText.includes("you passed!") || pageText.includes("you passed")) {
+        log(`[Quiz-Retry] ${quiz.name} is ALREADY PASSED ('You passed!' confirmed). Moving to next quiz...`);
+        return true;
+      }
+      if (pageText.includes("didn't pass") || pageText.includes("did not pass") || pageText.includes("you didn't pass")) {
+        log(`[Quiz-Retry] ${quiz.name} was FAILED. Will retake quiz now...`);
+        return false;
+      }
+      return false;
+    };
+
+    if (await checkQuizAlreadyPassed()) {
+      continue;
+    }
+
+    log(`[Quiz-Retry] Retaking ${quiz.name}...`);
+    const quizStartBtn = page.locator('button[data-testid="CoverPageActionButton"], button:has-text("Start assignment"), button:has-text("Start quiz"), button:has-text("Resume assignment"), button:has-text("Try again"), a:has-text("Try again")')
+      .filter({ visible: true })
+      .filter({ hasNotText: /weekly|target|goal/i })
+      .first();
+    if (await quizStartBtn.count().catch(() => 0) > 0) {
+      await quizStartBtn.click({ force: true, timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+
+      const modalAfterClick = page.locator('div, section, [role="dialog"]').filter({ hasText: /Start new attempt\?/i }).first();
+      if (await modalAfterClick.count().catch(() => 0) > 0 && await modalAfterClick.isVisible().catch(() => false)) {
+        const continueBtn = modalAfterClick.locator('button:has-text("Continue")').filter({ visible: true }).first();
+        if (await continueBtn.count().catch(() => 0) > 0) {
+          await continueBtn.click({ force: true, timeout: 5000 }).catch(() => {});
+          await page.waitForTimeout(500);
+        }
+      }
+    }
+
+    log(`[Quiz-Retry] Answering ${quiz.name} questions...`);
+    await page.waitForSelector("label", { state: "visible", timeout: 15000 }).catch(() => {});
+    for (const pattern of quiz.answers) {
+      try {
+        let label = page.locator("label").filter({ hasText: pattern }).first();
+        if (await label.count() > 0) {
+          await label.scrollIntoViewIfNeeded({ timeout: 3000 });
+          const input = label.locator("input").first();
+          if (await input.count() > 0) {
+            await input.check({ timeout: 3000, force: true }).catch(async () => { await label.click({ timeout: 3000, force: true }); });
+          } else {
+            await label.click({ timeout: 3000, force: true });
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (quiz.textInput) {
+      const inputLoc = page.locator(quiz.textInput.selector).first();
+      if (await inputLoc.count().catch(() => 0) > 0) {
+        await inputLoc.fill(quiz.textInput.value).catch(() => {});
+      }
+    }
+
+    // Honor Code: Instantly check agreement checkbox FIRST if present on screen
+    const agreementCheckbox = page.locator('#agreement-checkbox-base, input[id*="agreement"]').first();
+    const agreementLabel = page.locator('label:has(#agreement-checkbox-base), label:has-text("understand and agree")').first();
+
+    if (await agreementCheckbox.count().catch(() => 0) > 0 && await agreementCheckbox.isVisible().catch(() => false)) {
+      await agreementCheckbox.check({ force: true, timeout: 1000 }).catch(async () => {
+        await agreementLabel.click({ force: true, timeout: 1000 }).catch(() => {});
+      });
+    } else if (await agreementLabel.count().catch(() => 0) > 0 && await agreementLabel.isVisible().catch(() => false)) {
+      await agreementLabel.click({ force: true, timeout: 1000 }).catch(() => {});
+    }
+
+    const nameInput = page.locator('input[data-testid="honor-code-legal-name-input"], input[id*="honor-code"]').first();
+    if (await nameInput.count().catch(() => 0) > 0 && await nameInput.isVisible().catch(() => false)) {
+      await nameInput.fill(FULL).catch(() => {});
+    }
+
+    // Submit
+    await clickSel('button[data-testid="submit-button"]', { timeout: 10000 });
+    await page.waitForTimeout(1000);
+
+    // Modal Submit
+    const modalSubmitBtn = page.locator('button[data-testid="dialog-submit-button"]').filter({ visible: true }).first();
+    if (await modalSubmitBtn.count().catch(() => 0) > 0) {
+      await modalSubmitBtn.click({ force: true, timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
+    await clickSel('button[data-testid="dialog-submit-button"]', { timeout: 5000, optional: true });
+    await page.waitForTimeout(1500);
+  }
+
+  // Re-verify name and check certificate one final time
+  await goto("https://www.coursera.org/user-verification?returnTo=%2Fmy-learning%3FmyLearningTab%3DCERTIFICATES");
+  await fillSel("#first-name", student.first_name, { optional: true });
+  await fillSel("#last-name", student.last_name, { optional: true });
+  await clickSel("#check-acknowledge-age-base", { optional: true, force: true });
+  await page.waitForTimeout(1000);
+
+  await goto("https://www.coursera.org/my-learning?myLearningTab=CERTIFICATES");
+  const retakeCertUrl = await findCertificateUrl(page);
+  if (retakeCertUrl) {
+    log(`[Quiz-Retry] Certificate successfully captured after retake pass: ${retakeCertUrl}`);
+    return retakeCertUrl;
+  }
+
   log(`no certificate URL captured (ended at ${page.url()})`);
   await observer.capture("no-certificate-url");
   return "";
@@ -2084,14 +2257,14 @@ async function dismissOverlays(page) {
     await touAcceptBtn.click({ force: true }).catch(async () => {
       await touAcceptBtn.dispatchEvent("click").catch(() => {});
     });
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(200);
   }
 
   // 2) Coursera "broken Chrome version" warning dialog
   const brokenDialog = page.locator('.broken-chrome-version-dialog-bg-fix, [id*="broken-chrome"]').first();
   if (await brokenDialog.count() > 0 && await brokenDialog.isVisible().catch(() => false)) {
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(100);
   }
 
   // 3) Dismiss "Okay, got it!", "Today's Goals have moved", or informational popups
@@ -2099,7 +2272,7 @@ async function dismissOverlays(page) {
   if (await gotItBtn.count().catch(() => 0) > 0) {
     console.log(`  [Dismiss] Clicking 'Okay, got it!' popup button: "${await gotItBtn.innerText().catch(() => "Got it")}"`);
     await gotItBtn.click({ force: true }).catch(() => {});
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(150);
   }
 
   // 4) Skip / Skip for now / Remind me later interstitials
@@ -2107,7 +2280,18 @@ async function dismissOverlays(page) {
   if (await skipBtn.count() > 0) {
     console.log(`  [Dismiss] Clicking skip button: "${await skipBtn.innerText().catch(() => "Skip")}"`);
     await skipBtn.click({ force: true }).catch(() => {});
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(200);
+  }
+
+  // 5) Dismiss "Set weekly goal" / goal popups automatically
+  const goalModal = page.locator('[role="dialog"], div.rc-Modal, div[data-testid*="goal"]').filter({ hasText: /weekly goal|set a goal|learning goal/i }).first();
+  if (await goalModal.count().catch(() => 0) > 0 && await goalModal.isVisible().catch(() => false)) {
+    const goalCloseBtn = goalModal.locator('button:has-text("Skip"), button:has-text("Not now"), button:has-text("No thanks"), button[aria-label="Close"], button[aria-label="close"]').filter({ visible: true }).first();
+    if (await goalCloseBtn.count().catch(() => 0) > 0) {
+      console.log(`  [Dismiss] Dismissing weekly goal modal...`);
+      await goalCloseBtn.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(200);
+    }
   }
 
   // 5) Dismiss any generic modal overlay by clicking Accept, Escape, or close X button
@@ -2491,11 +2675,13 @@ async function runCoordinatorMode(config) {
         }).catch((e) => console.warn(`${logPrefix} report 'complete' failed: ${e.message}`));
         processed++;
         globalConsecutiveFailures = 0;
+        // Success speeds execution up slightly (clamped at minimum 1.0 baseline)
+        globalRemediationFactor = Math.max(1.0, globalRemediationFactor - 0.1);
         console.log(`${logPrefix} [queue:w${wid}] DONE -> ${result.cert} (Completed in ${duration} seconds)`);
 
-        // Purge all emails for this student dot-alias across Spam, Inbox, All Mail, and Trash
+        // Purge all emails for this student dot-alias across Spam, Inbox, All Mail, and Trash (non-blocking async)
         try {
-          execSync(`python3 -c 'import register_and_get_invite as r; r.purge_all_student_emails("${student.email}")'`, { stdio: "ignore" });
+          exec(`python3 -c 'import register_and_get_invite as r; r.purge_all_student_emails("${student.email}")'`, () => {});
         } catch (e) {}
       } else {
         const isFatalPass = result.error && result.error.includes("FATAL_PASSWORD_ERROR");
@@ -2507,24 +2693,17 @@ async function runCoordinatorMode(config) {
         failedHere++;
         globalConsecutiveFailures++;
         console.log(`${logPrefix} [queue:w${wid}] FAILED -> released for another PC to retry (Failed in ${duration} seconds). Error: ${result.error || "no certificate captured"}`);
-        console.error(`[CRITICAL] Consecutive student failures: ${globalConsecutiveFailures}/5`);
-        if (globalConsecutiveFailures >= 5) {
-          if (!cooldownActive) {
-            cooldownActive = true;
-            console.error(`[CRITICAL] 5 consecutive student failures detected. Entering cooling-down sleep for 5 hours before automatically resuming queue processing...`);
-            for (let hr = 1; hr <= 5; hr++) {
-              await sleep(60 * 60 * 1000); // Wait 1 hour
-              console.log(`[Cooldown Update] ${hr}/5 hours elapsed...`);
-            }
-            globalConsecutiveFailures = 0;
-            cooldownActive = false;
-            console.log(`[INFO] Cool-down complete. Resuming queue processing...`);
-          } else {
-            // If another worker thread already triggered the cooldown, wait until it finishes
-            while (cooldownActive) {
-              await sleep(10000);
-            }
-          }
+        console.warn(`[queue] Consecutive student failures: ${globalConsecutiveFailures}`);
+        
+        // Decrease speed by 0.2x after every 5 consecutive errors
+        if (globalConsecutiveFailures % 5 === 0) {
+          globalRemediationFactor += 0.2;
+          console.warn(`[remediation] ${globalConsecutiveFailures} consecutive failures reached. Decreased speed by 0.2x (remediation scale now ${globalRemediationFactor.toFixed(2)}).`);
+        }
+
+        // If error count reaches 15, delete learned_weights.json and start RL Q-table from scratch
+        if (globalConsecutiveFailures >= 15) {
+          await resetLearnedWeights();
         }
       }
     }
@@ -2846,27 +3025,20 @@ async function main() {
         if (student.certificate_url) {
           student.registered = "true";
           globalConsecutiveFailures = 0;
+          globalRemediationFactor = Math.max(1.0, globalRemediationFactor - 0.1);
           console.log(`\n${logPrefix} Certificate captured: ${student.certificate_url} (Completed in ${duration} seconds)`);
         } else {
           globalConsecutiveFailures++;
           console.log(`\n${logPrefix} Flow finished but no certificate URL was captured (Failed in ${duration} seconds).`);
-          console.error(`[CRITICAL] Consecutive student failures: ${globalConsecutiveFailures}/5`);
-          if (globalConsecutiveFailures >= 5) {
-            if (!cooldownActive) {
-              cooldownActive = true;
-              console.error(`[CRITICAL] 5 consecutive student failures detected. Entering cooling-down sleep for 5 hours before automatically resuming execution...`);
-              for (let hr = 1; hr <= 5; hr++) {
-                await sleep(60 * 60 * 1000); // Wait 1 hour
-                console.log(`[Cooldown Update] ${hr}/5 hours elapsed...`);
-              }
-              globalConsecutiveFailures = 0;
-              cooldownActive = false;
-              console.log(`[INFO] Cool-down complete. Resuming execution...`);
-            } else {
-              while (cooldownActive) {
-                await sleep(10000);
-              }
-            }
+          console.warn(`[AUTO] Consecutive student failures: ${globalConsecutiveFailures}`);
+
+          if (globalConsecutiveFailures % 5 === 0) {
+            globalRemediationFactor += 0.2;
+            console.warn(`[remediation] ${globalConsecutiveFailures} consecutive failures reached. Decreased speed by 0.2x (remediation scale now ${globalRemediationFactor.toFixed(2)}).`);
+          }
+
+          if (globalConsecutiveFailures >= 15) {
+            await resetLearnedWeights();
           }
         }
 

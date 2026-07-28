@@ -8,7 +8,10 @@ import email
 import random
 import csv
 import requests
+import socket
 from pathlib import Path
+
+socket.setdefaulttimeout(15)
 
 DB_PATH = Path("Names_db.json")
 USED_EMAILS_PATH = Path("used_emails.json")
@@ -245,7 +248,7 @@ def purge_all_student_emails(email_addr):
                 if status != "OK" or not data[0]:
                     continue
                 
-                msg_ids = data[0].split()
+                msg_ids = data[0].split()[-50:]
                 for mid in msg_ids:
                     _, mdata = mail.fetch(mid, "(BODY.PEEK[HEADER.FIELDS (TO)])")
                     if mdata and mdata[0] and isinstance(mdata[0], tuple):
@@ -266,7 +269,7 @@ def purge_all_student_emails(email_addr):
             mail.select('"[Gmail]/Trash"', readonly=False)
             status, data = mail.search(None, "ALL")
             if data[0]:
-                for mid in data[0].split():
+                for mid in data[0].split()[-50:]:
                     mail.store(mid, "+FLAGS", "\\Deleted")
                 mail.expunge()
         except Exception:

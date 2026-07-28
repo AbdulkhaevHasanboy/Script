@@ -18,7 +18,7 @@ socket.setdefaulttimeout(15)
 EXCEL_PATH = Path("Names.xlsx")
 DB_PATH = Path("Names_db.json")
 GMAIL_USER = "qwertyuioplkjhgfdsazxcvbnmhrh@gmail.com"
-GMAIL_APP_PASS = "feykxtyuitmnjevn"
+GMAIL_APP_PASS = "lxpgpkkhxitatnut"
 excel_lock_path = Path("excel.lock")
 
 def get_decoded_header(header_value):
